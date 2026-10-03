@@ -33,10 +33,13 @@
 | [vocab.design：Inspector](https://vocab.design/inspector) | 属性面板跟随选择、未选中时给说明、多选显示「混合」、切换对象时宽度与字段位置不变、窄屏改抽屉 |
 | [Android：Settings](https://developer.android.com/design/ui/mobile/guides/patterns/settings) / [Microsoft：App settings](https://learn.microsoft.com/en-us/windows/apps/design/app-settings/guidelines-for-app-settings) | 分组用小标题与分隔线、15 项以上分子页或加搜索、依赖项说明不可用原因、改了即生效、入口名与子页面标题一致、内容区限宽 |
 | [MUI：Density](https://mui.com/material-ui/customization/density/) / [Element Plus：Dark Mode](https://element-plus.org/en-US/guide/dark-mode) / [Ant Design：Customize theme](https://ant.design/docs/react/customize-theme) | stacks.md 配置片段里的 `defaultProps`、`html.dark` 变量覆盖、`[darkAlgorithm, compactAlgorithm]` 组合 |
+| [Lighthouse：Avoid an excessive DOM size](https://developer.chrome.com/docs/lighthouse/performance/dom-size) / [web.dev：content-visibility](https://web.dev/articles/content-visibility) | DOM 体积按整页节点数诊断（约 800 警告、约 1,400 报错），不是行数阈值；`content-visibility` 与 `contain-intrinsic-size` 的占位写法 |
 
 ui-ux-pro-max 的图表库（charts 数据）和图标库、taste-skill 的图标规则，按工作台场景改写为 charts.md、icons.md；它们的 GSAP 动效预设与 taste-skill 的液态玻璃不吸收，工作台动效只保留说明状态变化的做法（motion.md）。
 
 取舍说明：TokenTracker 的触屏热区是 ≥40px，本技能保留 44×44px 设计目标；其 150–250ms 动效时长与本技能 80–180ms 不同，紧凑界面取更短的反馈。
+
+长列表：ui-ux-pro-max 的「长列表虚拟化」保留为手段，原先「约 50 行就虚拟化或分页」的行数门槛已删除——它让轻量的管理列表被切成小页，打断了全量总览。现在分页按任务定，渲染策略按实测成本依次升级（tables.md）；行会展开、高度不一的列表用 `content-visibility` 时，占位高度和真实高度对不上会让恢复的滚动位置跳动，这是实际项目里踩过的问题。
 
 对话、编辑器、树、设置页四个专题参考了公开的 DESIGN.md 与组件文档，只吸收交互和可达性规则；它们的配色、大圆角气泡、Inter 字体、三点跳动的打字动画没有吸收，视觉仍按本技能的密度与主题。
 
