@@ -1,0 +1,204 @@
+/* 模板：挂在工作台根节点，按项目 token 命名与现有主题机制映射。
+ * 示例：class="dc-workbench" data-density="dense"（默认，可省略）/ "compact" / "comfortable"
+ *       data-theme="zinc-graphite-dark"（默认）或 "zinc-light"（可切换的浅色附加版）
+ * 本文件提供变量，不强制框架、组件、断点或业务布局。
+ */
+.dc-workbench {
+  --dc-space-1: 2px;
+  --dc-space-2: 4px;
+  --dc-space-3: 6px;
+  --dc-space-4: 8px;
+  --dc-space-5: 12px;
+  --dc-space-6: 16px;
+
+  /* 默认档 dense；compact、comfortable 见下方覆盖。
+   * 鼠标热区 24px 是 WCAG 2.2 AA 下限，正文 13px 是本技能下限。
+   */
+  --dc-control-height: 22px;
+  --dc-row-height: 24px;
+  --dc-hit-size: 24px;
+  --dc-icon-size: 16px;
+  --dc-pane-padding: 6px;
+  --dc-pane-gap: 4px;
+
+  --dc-text-small: 0.75rem;
+  --dc-text-body: 0.8125rem;
+  --dc-text-title: 1rem;
+  --dc-text-page: 1.125rem;
+  --dc-line-height: 1.45;
+
+  /* 一族无衬线承担全部文字；等宽只给 ID、哈希、token 数等。
+   * 计数、金额、时间列加 font-variant-numeric: tabular-nums。
+   */
+  --dc-font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+  --dc-font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* 形状尺度独立于密度和配色；角色映射为可调起点。
+   * 嵌套表面按实际内缩局部推导，共边组合按方向处理连接角。
+   */
+  --dc-radius-0: 0px;
+  --dc-radius-1: 4px;
+  --dc-radius-2: 6px;
+  --dc-radius-3: 10px;
+  --dc-radius-4: 14px;
+  --dc-radius-full: 9999px;
+
+  --dc-radius-none: var(--dc-radius-0);
+  --dc-radius-small: var(--dc-radius-1);
+  --dc-radius-control: var(--dc-radius-2);
+  --dc-radius-pane: var(--dc-radius-3);
+  --dc-radius-overlay: var(--dc-radius-4);
+  --dc-radius-pill: var(--dc-radius-full);
+  --dc-border-width: 1px;
+  --dc-duration: 120ms;
+  --dc-duration-exit: 80ms;
+  /* 进入减速、退出加速；匀速只给进度条和旋转。 */
+  --dc-ease-enter: cubic-bezier(0.2, 0, 0, 1);
+  --dc-ease-exit: cubic-bezier(0.4, 0, 1, 1);
+
+  /* 层级分档，组件只取这些值。 */
+  --dc-z-sticky: 10;
+  --dc-z-dropdown: 20;
+  --dc-z-overlay: 30;
+  --dc-z-modal: 40;
+  --dc-z-toast: 50;
+}
+
+.dc-workbench[data-density="compact"] {
+  --dc-control-height: 28px;
+  --dc-row-height: 32px;
+  --dc-hit-size: 28px;
+  --dc-pane-padding: 8px;
+  --dc-text-body: 0.875rem;
+}
+
+.dc-workbench[data-density="comfortable"] {
+  --dc-control-height: 36px;
+  --dc-row-height: 40px;
+  --dc-hit-size: 36px;
+  --dc-pane-padding: 12px;
+  --dc-text-body: 1rem;
+}
+
+/* 让热区真实参与排布。消费组件用 max(control-height, hit-size)
+ * 确定最小高度；图标与内层表面可保持紧凑。避免外扩伪元素交叠。
+ * 用 pointer 判断主指针：带触屏的电脑、部分编辑器内嵌预览在用鼠标时
+ * 也会命中 any-pointer: coarse，整页被放大成触屏尺寸。
+ */
+@media (pointer: coarse) {
+  .dc-workbench,
+  .dc-workbench[data-density] {
+    --dc-hit-size: 44px;
+    --dc-row-height: 44px;
+    --dc-text-body: 1rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dc-workbench {
+    --dc-duration: 0ms;
+    --dc-duration-exit: 0ms;
+  }
+}
+
+.dc-workbench[data-theme="zinc-graphite-dark"] {
+  color-scheme: dark;
+
+  /* 画布用 #191a1b 而不是更深的近黑，长时间看不压抑；其余表面随之提亮一档。 */
+  --dc-canvas: #191a1b;
+  --dc-subtle: #1d1e20;
+  --dc-surface: #212225;
+  --dc-raised: #28292c;
+  --dc-hover: #2e2f33;
+  --dc-pressed: #28292c;
+  --dc-border: #2e2f33;
+  --dc-border-strong: #45464b;
+  --dc-border-control: #7a7b82;
+
+  --dc-text: #fafafa;
+  --dc-text-secondary: #d4d4d8;
+  --dc-text-muted: #a1a1aa;
+  --dc-text-dim: #71717a;
+  --dc-accent: #58a6ff;
+  --dc-success: #3fb950;
+  --dc-warning: #d29922;
+  --dc-danger: #f85149;
+  --dc-special: #a371f7;
+
+  /* 主操作用明亮中性按钮。 */
+  --dc-primary-bg: #fafafa;
+  --dc-primary-fg: #18181b;
+
+  /* 浮层阴影取画布色相。 */
+  --dc-shadow-overlay: 0 8px 24px rgb(9 9 11 / 0.55);
+
+  /* 兼容不支持 color-mix 的环境。 */
+  --dc-selection: #28323f;
+  --dc-success-subtle: #25342a;
+  --dc-warning-subtle: #363025;
+  --dc-danger-subtle: #3b2829;
+
+  /* 浅底上的语义文字；Danger 在浅红底上不足 4.5:1，改用更亮的 ink */
+  --dc-accent-ink: var(--dc-accent);
+  --dc-success-ink: var(--dc-success);
+  --dc-warning-ink: var(--dc-warning);
+  --dc-danger-ink: #ff7b72;
+}
+
+.dc-workbench[data-theme="zinc-light"] {
+  color-scheme: light;
+
+  --dc-canvas: #f0f0f2;
+  --dc-surface: #fafafa;
+  --dc-raised: #fcfcfc;
+  --dc-hover: #ececef;
+  --dc-pressed: #e4e4e7;
+  --dc-border: #e4e4e7;
+  --dc-border-strong: #d4d4d8;
+  --dc-border-control: #8e8e96;
+
+  --dc-text: #18181b;
+  --dc-text-secondary: #3f3f46;
+  --dc-text-muted: #5f5f69;
+  --dc-text-dim: #a1a1aa;
+  --dc-accent: #0969da;
+  --dc-success: #1a7f37;
+  --dc-warning: #9a6700;
+  --dc-danger: #cf222e;
+  --dc-special: #8250df;
+
+  /* 主操作用近黑中性按钮，蓝色留给选中、链接和焦点。 */
+  --dc-primary-bg: #18181b;
+  --dc-primary-fg: #fafafa;
+
+  /* 浮层阴影取 Text 色相，不用纯黑。 */
+  --dc-shadow-overlay: 0 8px 24px rgb(24 24 27 / 0.12);
+
+  /* 兼容不支持 color-mix 的环境。 */
+  --dc-selection: #e2ebf7;
+  --dc-success-subtle: #e1ece5;
+  --dc-warning-subtle: #eee7da;
+  --dc-danger-subtle: #f6e4e6;
+
+  /* 语义色向 text 混入 15%（oklab），浅底上才过 4.5:1。 */
+  --dc-accent-ink: #155dba;
+  --dc-success-ink: #1f6e34;
+  --dc-warning-ink: #855a13;
+  --dc-danger-ink: #b1272d;
+}
+
+@supports (background-color: color-mix(in srgb, black, white)) {
+  .dc-workbench[data-theme="zinc-graphite-dark"] {
+    --dc-selection: color-mix(in srgb, var(--dc-accent) 12%, var(--dc-surface));
+    --dc-success-subtle: color-mix(in srgb, var(--dc-success) 12%, var(--dc-surface));
+    --dc-warning-subtle: color-mix(in srgb, var(--dc-warning) 12%, var(--dc-surface));
+    --dc-danger-subtle: color-mix(in srgb, var(--dc-danger) 12%, var(--dc-surface));
+  }
+
+  .dc-workbench[data-theme="zinc-light"] {
+    --dc-selection: color-mix(in srgb, var(--dc-accent) 10%, var(--dc-surface));
+    --dc-success-subtle: color-mix(in srgb, var(--dc-success) 11%, var(--dc-surface));
+    --dc-warning-subtle: color-mix(in srgb, var(--dc-warning) 13%, var(--dc-surface));
+    --dc-danger-subtle: color-mix(in srgb, var(--dc-danger) 10%, var(--dc-surface));
+  }
+}

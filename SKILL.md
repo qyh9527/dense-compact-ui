@@ -1,0 +1,91 @@
+---
+name: dense-compact-ui
+description: 紧凑高信息密度界面的设计、实现与评审指导：高密排版与 1px 分隔线分区、按角色分层的圆角、数字与字阶、强调色配额、窄屏重组，附 Zinc 深色默认主题（另有可切换的浅色附加版）与 CSS token，并按需索引表格、表单、实时数据、图表、AI 对话、编辑器、树形导航、设置页、图标、动效、组件库落地、改版、原生 App、字体、登录等专题规则。用于前端、UI、UX、界面、页面、组件、布局、样式、CSS、Tailwind、响应式、移动端适配、仪表盘、管理后台、工作台、编辑器、数据表格、图表、图标、动效、表单、AI 聊天界面、文件树、设置页、登录注册、iOS / Android / 桌面应用界面、字体选用、设计稿、界面改版或评审相关任务，以及从参考图提炼空间语言、为已有项目整理一页 DESIGN.md。不用于不涉及界面呈现的纯 JS 逻辑、接口、构建配置问题，也不用于追求视觉张扬的海报和营销落地页。触发后先询问用户是否采用本风格；用户已明确要求紧凑或高密度风格时直接使用。
+---
+
+# 紧凑高密度 UI
+
+本文件是入口和索引：每次都做「确认 → 判读 → 按索引读参考 → 检查并贴出结果」；细则都在 references/，只读当前任务用得到的文件。
+
+## 1. 先确认是否采用
+
+本技能会被宽泛的前端 / UI / UX 关键词加载，加载不等于用户要这种风格。
+
+- 用户已明确要紧凑、高密度、dense、compact 风格，或本会话已确认过 → 直接用，不再问。
+- 否则用 AskUserQuestion 问一次（没有该工具就用一句话问）：
+  1. **采用紧凑风格**（推荐给工作台、仪表盘、后台、编辑器这类信息密集界面）
+  2. **只借用检查**：风格沿用现有项目或用户指定的，只用 [verify.md](references/verify.md) 和下方索引里的专题文件
+  3. **不使用本技能**：不再读 references，按用户原本的要求继续
+- 同一会话只问一次，答案对后续界面任务继续有效，用户改口再变。
+
+## 2. 判读与准备
+
+1. **先说判读。** 动手前在回复里写一行：「判读：<界面> 给 <用户>，主要任务 <…>，密度 <dense（默认）/ compact / comfortable>，主题 <Zinc Graphite Dark / 沿用项目>，<新建 / 改版·保留 / 改版·重做>。」判读可能和需求有出入时只问一个问题；能确定就不问。
+2. **读现状。** 已有项目先找 DESIGN.md、tokens、Tailwind 配置或组件库主题，沿用其命名与形状语言；技术栈和依赖从项目文件识别，不假定。
+3. **列任务。** 写清用户要看什么、做什么、哪些上下文切换后必须保留；操作按频率分成常驻 / 按需展开 / 收进具名入口。
+
+## 3. 不变的底线
+
+- 目标是同一块屏幕里能看懂、能点到的有效信息更多。紧凑来自空间组织，不靠缩字：正文 ≥13px，不用负字距。
+- 默认高密档（行 24px / 控件 22px / 正文 13px），区域不包卡片，用 1px 分隔线分区；组件越密，分组间距越要拉开；工具栏、表头、数据行同档。
+- 聚焦型任务保持标准尺寸：菜单选择、逐项填写的长表单、引导、登录、结账、破坏性确认。密度由用户选择，不随断点自动变。
+- 三层分开维护：**空间**（分组、对齐、距离、密度）、**交互**（任务优先级、操作作用域、状态）、**主题**（色彩、边界、字重、圆角）；改一层不牵动另两层。
+- 彩色只给语义，强调色 ≤10%，每个视图一个主按钮；整页一个主题，默认 Zinc Graphite Dark（画布 `#191A1B`），浅色只在需要时加。
+- 数字用 `tabular-nums`；金额、计数、错误信息不截断。触屏热区 44px，文字对比 ≥4.5:1。
+
+## 4. 索引：遇到什么读什么
+
+先按界面类型找起点，再按主题补读。
+
+| 界面类型 | 先读 |
+| --- | --- |
+| 数据表格页、列表页、日志列表 | tables、patterns、layout-density |
+| 仪表盘、监控看板 | charts、realtime、layout-density |
+| 新建 / 编辑表单页 | forms、patterns |
+| 设置页、偏好面板 | settings、forms |
+| AI 对话、聊天、智能体工作台 | chat、motion、responsive |
+| 编辑器、卡片 / 条目编辑、属性面板 | editor、forms、tree |
+| 文件树、目录、文件管理 | tree、tables |
+| 登录、注册、找回密码 | auth、forms |
+| 手机或桌面原生 App | platforms、responsive |
+
+| 主题 | 读 |
+| --- | --- |
+| 布局、密度档位、卡片与分隔线、承载结构、控件排布、字体与数字、参考图 | [layout-density.md](references/layout-density.md) |
+| 圆角、嵌套表面、共边组合 | [shape-radius.md](references/shape-radius.md) |
+| 窄屏、移动端网页、区域关系、滚动、安全区 | [responsive.md](references/responsive.md) |
+| 配色、主题、深浅切换、对比度；CSS 变量起点 | [color.md](references/color.md)、[tokens.css](assets/tokens.css) |
+| 长内容截断、加载状态、URL 状态、导航反馈、操作命名、快捷键、拖拽 | [patterns.md](references/patterns.md) |
+| 表格：列宽、排序筛选、选择与批量操作、分页与虚拟滚动、行内编辑 | [tables.md](references/tables.md) |
+| 表单：布局、字段、校验、提交、草稿 | [forms.md](references/forms.md) |
+| 实时数据：刷新节奏、不打断阅读、连接状态、播报 | [realtime.md](references/realtime.md) |
+| 图表选型与通用规则、仪表盘 | [charts.md](references/charts.md) |
+| AI 对话：输入框、流式输出与滚动、消息操作 | [chat.md](references/chat.md) |
+| 编辑器：分栏、属性面板、保存与撤销、命令面板 | [editor.md](references/editor.md) |
+| 树形导航、文件管理、拖放 | [tree.md](references/tree.md) |
+| 设置页：分组、搜索、保存方式、恢复默认 | [settings.md](references/settings.md) |
+| 改版已有界面、项目已有组件库 | [redesign.md](references/redesign.md) |
+| Tailwind、shadcn、Ant Design、Element Plus、MUI 等落地密度与主题（含配置片段） | [stacks.md](references/stacks.md) |
+| 选图标库、图标尺寸、操作对应的图标 | [icons.md](references/icons.md) |
+| 动效：弹出层、展开收起、列表增删、视图切换、拖拽 | [motion.md](references/motion.md) |
+| iOS / Android / 桌面原生、Tauri 移动端、React Native、Flutter、触感反馈 | [platforms.md](references/platforms.md) |
+| 品牌字体、网络字体加载、中文字体 | [fonts.md](references/fonts.md) |
+| 登录、注册、找回密码、验证码、通行密钥 | [auth.md](references/auth.md) |
+| 整理一页 DESIGN.md | [design-md.md](references/design-md.md) |
+| 某条规则的出处与取舍 | [sources.md](references/sources.md) |
+
+界面类型表里的名称对应 references/ 下的同名 `.md` 文件。一个任务涉及多行就各读一次；专题文件末尾的「检查」并入交付前检查。
+
+## 5. 交付前检查
+
+用真实内容逐项过 [verify.md](references/verify.md)。交付时把检查结果贴在回复里，每项标「预览验证 / 静态检查 / 未验证」；没贴出检查结果，不算完成。最低要求：
+
+- [ ] 长内容、200% 文字缩放、窄到 360px、矮视口、软键盘弹出时核心任务都能完成
+- [ ] 选中、焦点、悬停、进行中、错误各自可辨，焦点环没被父容器裁掉
+- [ ] 触屏常用操作实际热区约 44×44px，热区互不重叠
+- [ ] 文字对比 ≥4.5:1，必要的控件与状态线索 ≥3:1
+- [ ] 可见文案逐条重读过；没有占位式假数据，彩色圆点只表示真实状态
+
+## 6. 交付
+
+按任务交付界面、实现、设计规格或评审结论，用当前产品的名称和内容。简述关键空间决策、圆角体系、窄屏行为、主题和验证结果。评审时问题按影响排序：可达性 > 触控与交互 > 性能 > 布局与响应式 > 字体与色彩 > 动效与装饰。
