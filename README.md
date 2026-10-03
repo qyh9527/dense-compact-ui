@@ -12,7 +12,7 @@ Agent 加载技能后会先问你是否采用这种风格；你已经明确要�
 
 ## 版本
 
-技能文件推到 `main` 后由 GitHub Actions 自动发 release，附打包好的技能 zip。默认升 patch 版本；提交信息里写 `[minor]` 或 `[major]` 升对应级别，写 `[skip release]` 则这次不发。
+技能文件推到 `main` 后由 GitHub Actions 自动发 release，附打包好的技能 zip。默认升 patch 版本；提交标题里写 `[minor]` 或 `[major]` 升对应级别，写 `[skip release]` 则这次不发。
 
 ## 许可
 

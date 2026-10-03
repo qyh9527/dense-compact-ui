@@ -1,6 +1,7 @@
 # 技能文件推到 main 后自动发版。
-# 默认升 patch；本次推送的提交信息里写 [minor] / [major] 升对应级别，
-# 推送的最后一个提交写 [skip release] 则这次不发（改动并入下次发版）。
+# 默认升 patch；本次推送的提交标题（首行）里写 [minor] / [major] 升对应级别，
+# 推送的最后一个提交标题写 [skip release] 则这次不发（改动并入下次发版）。
+# 只认标题，正文里提到这些标记不算。
 # 也可以在 Actions 页面手动运行，选择升级级别。
 name: release
 
@@ -33,7 +34,7 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -52,20 +53,21 @@ jobs:
             echo "skip=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          if [ "$EVENT" = push ] && grep -qiF '[skip release]' <<<"$HEAD_MESSAGE"; then
-            echo "提交信息要求跳过发版"
+          head_subject=${HEAD_MESSAGE%%$'\n'*}
+          if [ "$EVENT" = push ] && grep -qiF '[skip release]' <<<"$head_subject"; then
+            echo "提交标题要求跳过发版"
             echo "skip=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
           if [ "$prev" = v0.0.0 ]; then range=HEAD; else range="$prev..HEAD"; fi
-          messages=$(git log --format=%B "$range")
+          subjects=$(git log --format=%s "$range")
 
           if [ "$EVENT" = workflow_dispatch ]; then
             bump=$INPUT_BUMP
-          elif grep -qiF '[major]' <<<"$messages"; then
+          elif grep -qiF '[major]' <<<"$subjects"; then
             bump=major
-          elif grep -qiF '[minor]' <<<"$messages"; then
+          elif grep -qiF '[minor]' <<<"$subjects"; then
             bump=minor
           else
             bump=patch
