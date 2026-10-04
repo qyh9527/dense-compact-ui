@@ -40,7 +40,7 @@
 | Pressed | `#28292C` | 短暂按压，必要时加内描边 |
 | Border | `#2E2F33` | 装饰分隔线、面板边界 |
 | Border Strong | `#45464B` | 较明显的结构边界 |
-| Control Border | `#7A7B82` | 输入框等靠边界辨识的控件（对 Surface 3.8:1） |
+| Control Border | `#7A7B82` | 输入框等靠边界辨识的控件（对 Canvas 4.1:1、Surface 3.8:1） |
 | Text | `#FAFAFA` | 标题、重要信息 |
 | Text Secondary | `#D4D4D8` | 正文、常规标签 |
 | Text Muted | `#A1A1AA` | 元数据、提示、占位 |
@@ -86,13 +86,14 @@ Zinc Graphite Dark 的浅色镜像：同一套 token 名，纯中性灰阶 + Pri
 | Token | 色值 | 用途 |
 | --- | --- | --- |
 | Canvas | `#F0F0F2` | 最外层画布，比面板暗一级 |
+| Subtle | `#F5F5F7` | 过渡底色，按需 |
 | Surface | `#FAFAFA` | 工作面板、常规内容 |
 | Raised | `#FCFCFC` | 浮层、输入框底；配边框或阴影区分 |
 | Hover | `#ECECEF` | 短暂悬停 |
 | Pressed | `#E4E4E7` | 短暂按压 |
 | Border | `#E4E4E7` | 装饰分隔线、面板边界 |
 | Border Strong | `#D4D4D8` | 较明显的结构边界 |
-| Control Border | `#8E8E96` | 输入框等靠边界辨识的控件（对 Surface 3.1:1） |
+| Control Border | `#85858D` | 输入框等靠边界辨识的控件（对 Canvas 3.2:1、Surface 3.5:1） |
 | Text | `#18181B` | 标题、重要信息 |
 | Text Secondary | `#3F3F46` | 正文、常规标签 |
 | Text Muted | `#5F5F69` | 元数据、提示、占位（对 Canvas 也过 4.5:1） |
@@ -106,10 +107,10 @@ Zinc Graphite Dark 的浅色镜像：同一套 token 名，纯中性灰阶 + Pri
 | Success | `#1A7F37` | `#1F6E34` |
 | Warning | `#9A6700` | `#855A13` |
 | Danger | `#CF222E` | `#B1272D` |
-| Special | `#8250DF` | — |
+| Special | `#8250DF` | `#7048BE` |
 
 - **主操作用近黑按钮**（`#18181B` 底 / `#FAFAFA` 字），蓝色只留给选中、链接和焦点，不占强调色配额。
-- **浅底上的语义文字用 ink 色。** 语义色直接放在 10–13% 浅底上只有约 4.0–4.4:1；ink 是语义色向 Text 混入 15%（oklab）后的值，全部 ≥4.9:1。选中态文字、状态标记都用 ink；放在 Surface 上的链接和图标可直接用语义色。
+- **浅底上的语义文字用 ink 色。** 语义色直接放在 10–13% 浅底上只有约 4.0–4.4:1，放在 Canvas 上约 4.3–4.7:1，不能稳定过 4.5:1；ink 是语义色向 Text 混入 15%（oklab）后的值，对 Canvas 和 Surface 全部 ≥5.3:1。选中态文字、状态标记都用 ink（`--dc-*-ink`）；放在 Surface 上的链接和图标可直接用语义色。
 - 浅底混合比例：Selection 10%、Success 11%、Warning 13%、Danger 10%，各自混入 Surface。
 - 选中、焦点、悬停的规则与深色主题相同。
 

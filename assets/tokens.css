@@ -150,19 +150,22 @@
   --dc-success-ink: var(--dc-success);
   --dc-warning-ink: var(--dc-warning);
   --dc-danger-ink: #ff7b72;
+  --dc-special-ink: var(--dc-special);
 }
 
 .dc-workbench[data-theme="zinc-light"] {
   color-scheme: light;
 
   --dc-canvas: #f0f0f2;
+  --dc-subtle: #f5f5f7;
   --dc-surface: #fafafa;
   --dc-raised: #fcfcfc;
   --dc-hover: #ececef;
   --dc-pressed: #e4e4e7;
   --dc-border: #e4e4e7;
   --dc-border-strong: #d4d4d8;
-  --dc-border-control: #8e8e96;
+  /* 对 Canvas 3.2:1、Surface 3.5:1，控件直接放在画布上也够 3:1。 */
+  --dc-border-control: #85858d;
 
   --dc-text: #18181b;
   --dc-text-secondary: #3f3f46;
@@ -192,6 +195,7 @@
   --dc-success-ink: #1f6e34;
   --dc-warning-ink: #855a13;
   --dc-danger-ink: #b1272d;
+  --dc-special-ink: #7048be;
 }
 
 @supports (background-color: color-mix(in srgb, black, white)) {
