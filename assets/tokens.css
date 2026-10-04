@@ -13,6 +13,7 @@
 
   /* 默认档 dense；compact、comfortable 见下方覆盖。
    * 鼠标热区 24px 是 WCAG 2.2 AA 下限，正文 13px 是本技能下限。
+   * control-height 是控件的视觉高度，控件实际最小高度取 max(control-height, hit-size)。
    */
   --dc-control-height: 22px;
   --dc-row-height: 24px;
@@ -80,8 +81,11 @@
   --dc-text-body: 1rem;
 }
 
-/* 让热区真实参与排布。消费组件用 max(control-height, hit-size)
- * 确定最小高度；图标与内层表面可保持紧凑。避免外扩伪元素交叠。
+/* 让热区真实参与排布：可点的控件和行用
+ * min-height: max(var(--dc-control-height 或 --dc-row-height), var(--dc-hit-size))；
+ * 图标与内层表面可保持紧凑。避免外扩伪元素交叠。
+ * 触屏只抬热区和正文（输入框 ≥16px，iOS 聚焦时才不放大页面）；行高仍随档位，
+ * 可点的行经上面的 max() 到 44px，只读行和间距照常随密度切换。
  * 用 pointer 判断主指针：带触屏的电脑、部分编辑器内嵌预览在用鼠标时
  * 也会命中 any-pointer: coarse，整页被放大成触屏尺寸。
  */
@@ -89,7 +93,6 @@
   .dc-workbench,
   .dc-workbench[data-density] {
     --dc-hit-size: 44px;
-    --dc-row-height: 44px;
     --dc-text-body: 1rem;
   }
 }

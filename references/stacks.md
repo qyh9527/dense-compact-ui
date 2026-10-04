@@ -56,7 +56,7 @@
 }
 ```
 
-高度直接引用密度变量，切换档位时跟着变：`h-(--dc-control-height)`、`h-(--dc-row-height)`、`min-h-(--dc-hit-size)`。
+高度直接引用密度变量，切换档位时跟着变：控件写 `min-h-[max(var(--dc-control-height),var(--dc-hit-size))]`，可点的行写 `min-h-[max(var(--dc-row-height),var(--dc-hit-size))]`。`--dc-control-height` 只是视觉高度，单独写 `h-(--dc-control-height)` 会得到 22px 的控件，触屏上也到不了 44px。
 
 ### shadcn/ui
 
@@ -75,7 +75,7 @@
 }
 ```
 
-`--accent` 和 `--primary` 的取舍见 color.md 的「集成」。紧凑尺寸：在 `components/ui/button.tsx` 的 `size` 变体里加一档 `dense: "h-(--dc-control-height) px-2 text-xs"`；表格在 `table.tsx` 里把 `TableHead`、`TableCell` 的高度改成 `h-(--dc-row-height)`，上下内边距改为 0。
+`--accent` 和 `--primary` 的取舍见 color.md 的「集成」。紧凑尺寸：在 `components/ui/button.tsx` 的 `size` 变体里加一档 `dense: "min-h-[max(var(--dc-control-height),var(--dc-hit-size))] px-2 text-xs"`；表格在 `table.tsx` 里把 `TableHead`、`TableCell` 的高度改成 `h-(--dc-row-height)`，上下内边距改为 0。
 
 ### Ant Design
 
