@@ -1,6 +1,8 @@
 /* 模板：挂在工作台根节点，按项目 token 命名与现有主题机制映射。
  * 示例：class="dc-workbench" data-density="dense"（默认，可省略）/ "compact" / "comfortable"
  *       data-theme="zinc-graphite-dark"（默认）或 "zinc-light"（可切换的浅色附加版）
+ * 组件库变量写在 :root / .dark 上时（shadcn、Element Plus 等），把 class 和 data-* 挂在 <html>，
+ * 与 .dark 同一个元素：自定义属性在声明它的元素上解析 var(--dc-*)，挂在后代上会得到无效值。
  * 本文件提供变量，不强制框架、组件、断点或业务布局。
  */
 .dc-workbench {

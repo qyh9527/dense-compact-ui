@@ -22,7 +22,7 @@
 | --- | --- | --- | --- |
 | Tailwind CSS v4 | 没有内置档位；用 `--dc-*` 变量配高度类，或在 `@theme` 里定义尺寸变量 | `@theme` 把 `--dc-*` 映射成 `--color-*`、`--radius-*`、`--font-*`；变量引用其他变量时用 `@theme inline` | tailwindcss.com/docs/theme |
 | shadcn/ui | 没有全局尺寸；改组件源码里的高度类，或加一个紧凑 `size` 变体 | `:root` / `.dark` 下的 CSS 变量（`--background`、`--foreground`、`--border`、`--ring` 等），对照 color.md 的「集成」 | ui.shadcn.com/docs/theming |
-| Ant Design | `ConfigProvider` 的 `theme.algorithm` 加入 `theme.compactAlgorithm`（可与 `darkAlgorithm` 组合）；`componentSize="small"` | `theme.token`（主色、圆角、字体等）与 `theme.components` 组件 token | ant.design/docs/react/customize-theme |
+| Ant Design | `componentSize="small"`（控件 24px）；不加 `theme.compactAlgorithm`：它以 `fontSizeSM` 为基准派生字号，配 `fontSize: 13` 会把正文压到 10px | `theme.token`（主色、圆角、字体等）与 `theme.components` 组件 token | ant.design/docs/react/customize-theme |
 | Element Plus | `el-config-provider` 的 `size="small"` | 覆盖 `--el-*` CSS 变量 | element-plus.org 的 Config Provider、Theming |
 | MUI | 官方 Density 做法：在 theme 的 `components.*.defaultProps` 里设 `size: 'small'`、`margin: 'dense'`、`dense: true`，Toolbar 用 `variant: 'dense'` | `createTheme` 的 palette、shape、typography，或 CSS 变量模式 | mui.com/material-ui/customization/density |
 | Carbon | 组件的 `size` 属性；DataTable 的 `xs`（24px）/ `sm`（32px）正好对应 dense / compact，工具栏配小号 | Carbon 主题（如 g100）再覆盖 token | carbondesignsystem.com 的 Data table |
@@ -33,7 +33,7 @@
 
 ## 配置片段
 
-下面的片段是起点：颜色都引用 `tokens.css` 的 `--dc-*`，先把 tokens.css 引入项目。片段按 Tailwind v4、Ant Design v5 / v6、Element Plus 2.x、MUI v5–v7、Fluent UI v9 写；粘贴前核对项目的主版本，改完实测行高和控件高。
+下面的片段是起点：颜色都引用 `tokens.css` 的 `--dc-*`，先把 tokens.css 引入项目。库的主题变量写在 `:root` / `.dark` 上时（shadcn、Element Plus），把 `dc-workbench` 类和 `data-theme` 挂在 `<html>` 上，与 `.dark` 同一个元素，否则库变量解析不到 `--dc-*`，整页退回默认色。片段按 Tailwind v4、Ant Design v5 / v6、Element Plus 2.x、MUI v5–v9、Fluent UI v9 写；粘贴前核对项目的主版本，改完实测行高、控件高和正文字号。
 
 ### Tailwind CSS v4
 
@@ -41,26 +41,30 @@
 @import "tailwindcss";
 @import "./tokens.css";
 
+/* 加 dc- 前缀，避开 shadcn 等已有的 --color-muted、--color-accent */
 @theme inline {
-  --color-canvas: var(--dc-canvas);
-  --color-surface: var(--dc-surface);
-  --color-raised: var(--dc-raised);
-  --color-line: var(--dc-border);
-  --color-fg: var(--dc-text);
-  --color-muted: var(--dc-text-muted);
-  --color-accent: var(--dc-accent);
-  --color-danger: var(--dc-danger-ink);
-  --radius-control: var(--dc-radius-control);
-  --radius-pane: var(--dc-radius-pane);
+  --color-dc-canvas: var(--dc-canvas);
+  --color-dc-surface: var(--dc-surface);
+  --color-dc-raised: var(--dc-raised);
+  --color-dc-line: var(--dc-border);
+  --color-dc-fg: var(--dc-text);
+  --color-dc-muted: var(--dc-text-muted);
+  --color-dc-accent: var(--dc-accent);
+  --color-dc-danger: var(--dc-danger-ink);
+  --radius-dc-control: var(--dc-radius-control);
+  --radius-dc-pane: var(--dc-radius-pane);
   --font-sans: var(--dc-font-sans);
 }
 ```
+
+用法如 `bg-dc-surface`、`text-dc-muted`、`border-dc-line`、`rounded-dc-control`。
 
 高度直接引用密度变量，切换档位时跟着变：控件写 `min-h-[max(var(--dc-control-height),var(--dc-hit-size))]`，可点的行写 `min-h-[max(var(--dc-row-height),var(--dc-hit-size))]`。`--dc-control-height` 只是视觉高度，单独写 `h-(--dc-control-height)` 会得到 22px 的控件，触屏上也到不了 44px。
 
 ### shadcn/ui
 
 ```css
+/* <html class="dark dc-workbench" data-theme="zinc-graphite-dark">：.dark 和 --dc-* 在同一个元素上 */
 .dark {
   --background: var(--dc-canvas);
   --foreground: var(--dc-text);
@@ -85,13 +89,14 @@ import { ConfigProvider, theme } from 'antd';
 <ConfigProvider
   componentSize="small"
   theme={{
-    algorithm: [theme.darkAlgorithm, theme.compactAlgorithm],
+    algorithm: theme.darkAlgorithm,
     token: {
       colorBgBase: '#191a1b',
       colorTextBase: '#fafafa',
       colorPrimary: '#58a6ff',
       borderRadius: 6,
       fontSize: 13,
+      fontSizeSM: 12,
     },
   }}
 >
@@ -99,7 +104,7 @@ import { ConfigProvider, theme } from 'antd';
 </ConfigProvider>
 ```
 
-`token` 只接受具体颜色值，不能写 `var(--dc-*)`（算法要据此派生色阶）。紧凑算法加 `small` 后控件仍可能略高于 22px：用 `token.controlHeight` 和 `components.Table` 的单元格内边距 token 微调，改完量一下。
+`token` 只接受具体颜色值，不能写 `var(--dc-*)`（算法要据此派生色阶）。这组 token 派生出正文 13px、小字 12px、`small` 控件 24px（`controlHeightSM`），比 22px 视觉高度略高、正好是鼠标热区下限。`fontSizeSM` 要显式写：只给 `fontSize: 13` 时派生出的小字是 10px。表格行压到 24px 用 `components.Table` 的 `cellPaddingBlockSM`；改完用 `theme.getDesignToken()` 核对字号和控件高，再量实际行高。
 
 ### Element Plus
 
@@ -116,7 +121,7 @@ import './styles/element-dc.css'   // 放在 Element Plus 样式之后
 ```
 
 ```css
-/* element-dc.css */
+/* element-dc.css；<html class="dark dc-workbench">，--dc-* 和 html.dark 在同一个元素上 */
 html.dark {
   --el-bg-color-page: var(--dc-canvas);
   --el-bg-color: var(--dc-surface);
@@ -143,7 +148,11 @@ const theme = createTheme({
     divider: '#2e2f33',
   },
   shape: { borderRadius: 6 },
-  typography: { fontSize: 13 },
+  typography: {
+    body1: { fontSize: '0.8125rem' },
+    body2: { fontSize: '0.8125rem' },
+    caption: { fontSize: '0.75rem' },
+  },
   components: {
     MuiButton: { defaultProps: { size: 'small' } },
     MuiIconButton: { defaultProps: { size: 'small' } },
@@ -156,7 +165,7 @@ const theme = createTheme({
 });
 ```
 
-`defaultProps` 这部分来自 MUI 官方 Density 页；表格行要压到 24px，还要像最后一行那样改单元格内边距。
+`defaultProps` 这部分来自 MUI 官方 Density 页；表格行要压到 24px，还要像最后一行那样改单元格内边距。`typography.fontSize` 是 rem 换算基准，不是正文字号：设成 13 时 body1 是 14.86px、caption 只有 11.14px，所以正文按变体逐个设（`CssBaseline` 给 body 用的是 body1）。
 
 ### Carbon、Fluent UI、Primer
 
