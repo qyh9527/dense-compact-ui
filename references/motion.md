@@ -6,7 +6,7 @@
 
 - 时长取 `--dc-duration`（进入 120ms）/ `--dc-duration-exit`（退出 80ms）；抽屉、整块面板这类大面积位移可到 180–240ms，不超过 300ms。
 - 缓动取变量：进入用减速 `--dc-ease-enter`，退出用加速 `--dc-ease-exit`；匀速只给进度条和旋转。
-- 只对 `transform` 和 `opacity` 做动画；高度展开是例外，只用于小区域。
+- 位移、缩放、淡入淡出只动 `transform` 和 `opacity`；高度展开是例外，只用于小区域。悬停、按压、选中的颜色短过渡（`background-color`、`border-color`、`color`，时长不超过 `--dc-duration`）可以用，它们只触发重绘；不过渡 `width`、`top` 这类会引起重排的属性。
 - 动画可打断：快速连续操作时直接设到最终状态，状态更新不依赖动画结束事件。
 - `prefers-reduced-motion: reduce` 时，位移和缩放改为淡入淡出或直接切换。
 - 长列表、表格行不逐项入场；数据刷新不做闪烁，变化的数字可以短暂高亮底色（不超过 1 秒）。
