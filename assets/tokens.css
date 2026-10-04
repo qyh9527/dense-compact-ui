@@ -13,6 +13,8 @@
 
   /* 默认档 dense；compact、comfortable 见下方覆盖。
    * 鼠标热区 24px 是 WCAG 2.2 AA 下限，正文 13px 是本技能下限。
+   * 行高、控件高都是最小高度：用 min-height / min-block-size 消费，文字放大时自己撑高
+   *（表格单元格的 height 本身就按最小高度算）。用 px 让空间预算可预测，放大交给文字撑高。
    * control-height 是控件的视觉高度，控件实际最小高度取 max(control-height, hit-size)。
    */
   --dc-control-height: 22px;

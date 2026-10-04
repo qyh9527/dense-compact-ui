@@ -14,7 +14,7 @@
 
 ## 结构与列宽
 
-- 工具栏、表头、数据行同一档高度（dense 24px / compact 32px）；表头 `position: sticky` 固定，横向滚动时名称或 ID 列可固定在左侧。
+- 工具栏、表头、数据行同一档高度（dense 24px / compact 32px），按 layout-density.md「密度配套」的最小高度写法；表头 `position: sticky` 固定，横向滚动时名称或 ID 列可固定在左侧。
 - sticky 相对最近的滚动容器定位。任何一层 `overflow` 不是 `visible`，它就成了参照层（`overflow-x: auto` 会让 `overflow-y` 也算成 `auto`），这时 `top` 写顶栏高度会把整行表头恒定地推下去。二选一：表容器自己滚动时给它真实高度约束（见 responsive.md 的「滚动」），表头 `top: 0`；交给页面滚动时外层不设 `overflow`，`top` 才能用顶栏高度。shadcn 的 `Table` 默认包了一层 `overflow-auto` 容器，属于前一种。
 - 列宽用 `rem` 或 `px`，不用 `em`：`em` 跟着表头的小字号算，表头和数据行会对不齐。
 - 数字、状态、时间、操作列给固定宽度，按最长的真实值留位；名称列吃剩余宽度。每列有最小宽度，放不下就整表横向滚动，不把数字列挤到截断。

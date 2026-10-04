@@ -75,7 +75,7 @@
 }
 ```
 
-`--accent` 和 `--primary` 的取舍见 color.md 的「集成」。紧凑尺寸：在 `components/ui/button.tsx` 的 `size` 变体里加一档 `dense: "min-h-[max(var(--dc-control-height),var(--dc-hit-size))] px-2 text-xs"`；表格在 `table.tsx` 里把 `TableHead`、`TableCell` 的高度改成 `h-(--dc-row-height)`，上下内边距改为 0。
+`--accent` 和 `--primary` 的取舍见 color.md 的「集成」。紧凑尺寸：在 `components/ui/button.tsx` 的 `size` 变体里加一档 `dense: "min-h-[max(var(--dc-control-height),var(--dc-hit-size))] px-2 text-xs"`；表格在 `table.tsx` 里把 `TableHead`、`TableCell` 的高度改成 `h-(--dc-row-height)`（单元格的 `height` 按最小高度算，文字放大时会撑高），上下内边距改为 0；表格以外的工具栏、批量操作条用 `min-h-(--dc-row-height)`，不用 `h-`，否则 200% 文字缩放时会裁切。
 
 ### Ant Design
 
