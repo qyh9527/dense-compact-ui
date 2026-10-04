@@ -17,7 +17,7 @@
    * 鼠标热区 24px 是 WCAG 2.2 AA 下限，正文 13px 是本技能下限。
    * 行高、控件高都是最小高度：用 min-height / min-block-size 消费，文字放大时自己撑高
    *（表格单元格的 height 本身就按最小高度算）。用 px 让空间预算可预测，放大交给文字撑高。
-   * control-height 是控件的视觉高度，控件实际最小高度取 max(control-height, hit-size)。
+   * row-height 含行间 1px 分隔线；control-height 是控件的视觉高度，控件实际最小高度取 max(control-height, hit-size)。
    */
   --dc-control-height: 22px;
   --dc-row-height: 24px;
@@ -55,6 +55,12 @@
   --dc-radius-overlay: var(--dc-radius-4);
   --dc-radius-pill: var(--dc-radius-full);
   --dc-border-width: 1px;
+  /* 焦点环默认外描边；在滚动容器、单元格、满宽行里改用 inset 内描边防裁切。
+   * 背景是 --dc-primary-bg 的元素保持外描边：Accent 画在它上面不到 3:1。
+   */
+  --dc-focus-width: 2px;
+  --dc-focus-offset: 2px;
+  --dc-focus-offset-inset: -2px;
   --dc-duration: 120ms;
   --dc-duration-exit: 80ms;
   /* 进入减速、退出加速；匀速只给进度条和旋转。 */
