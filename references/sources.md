@@ -35,6 +35,7 @@
 | [MUI：Density](https://mui.com/material-ui/customization/density/) / [Element Plus：Dark Mode](https://element-plus.org/en-US/guide/dark-mode) / [Ant Design：Customize theme](https://ant.design/docs/react/customize-theme) / [shadcn/ui：Theming](https://ui.shadcn.com/docs/theming) | stacks.md 配置片段里的 `defaultProps`、`html.dark` 变量覆盖、shadcn 的 `--color-muted` / `--color-accent` 同名变量。片段经 antd 6.6.5 `getDesignToken()` 与 @mui/material 9.4.0 `createTheme()` 实测：`compactAlgorithm` 以 `fontSizeSM` 为基准派生，配 `fontSize: 13` 得到 10px 正文，所以片段不用它；MUI `typography.fontSize` 是换算基准，正文按变体设 |
 | [Lighthouse：Avoid an excessive DOM size](https://developer.chrome.com/docs/lighthouse/performance/dom-size) / [web.dev：content-visibility](https://web.dev/articles/content-visibility) | DOM 体积按整页节点数诊断（约 800 警告、约 1,400 报错），不是行数阈值；`content-visibility` 与 `contain-intrinsic-size` 的占位写法 |
 | [WebKit：Designing Websites for iPhone X](https://webkit.org/blog/7929/designing-websites-for-iphone-x/) / [MDN：Using environment variables](https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Environment_variables/Using) | 横屏左右安全区、`max(<内边距>, env(safe-area-inset-*))`、吸底栏用 `env()` 补位 |
+| [W3C：Media Queries Level 5](https://drafts.csswg.org/mediaqueries-5/#prefers-color-scheme) / [Mozilla bug 1643656](https://bugzilla.mozilla.org/show_bug.cgi?id=1643656) | `prefers-color-scheme` 只剩 `light` / `dark`，`no-preference` 已删除，系统无偏好时报告 `light`，所以「跟随系统」不能兼当默认深色 |
 
 ui-ux-pro-max 的图表库（charts 数据）和图标库、taste-skill 的图标规则，按工作台场景改写为 charts.md、icons.md；它们的 GSAP 动效预设与 taste-skill 的液态玻璃不吸收，工作台动效只保留说明状态变化的做法（motion.md）。
 
