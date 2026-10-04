@@ -157,6 +157,14 @@
   --dc-warning-ink: var(--dc-warning);
   --dc-danger-ink: #ff7b72;
   --dc-special-ink: var(--dc-special);
+
+  /* 图表分类色：只在图表、分布条里用；对 Canvas 到 Raised 都 ≥4.3:1。 */
+  --dc-viz-1: #39c5cf;
+  --dc-viz-2: #f0883e;
+  --dc-viz-3: #a5a5ff;
+  --dc-viz-4: #db61a2;
+  --dc-viz-5: #c4a27c;
+  --dc-viz-other: #8b8b94;
 }
 
 .dc-workbench[data-theme="zinc-light"] {
@@ -202,6 +210,14 @@
   --dc-warning-ink: #855a13;
   --dc-danger-ink: #b1272d;
   --dc-special-ink: #7048be;
+
+  /* 图表分类色：只在图表、分布条里用；对 Canvas 到 Raised 都 ≥3.6:1。 */
+  --dc-viz-1: #1b7c83;
+  --dc-viz-2: #bc4c00;
+  --dc-viz-3: #5a54c9;
+  --dc-viz-4: #bf3989;
+  --dc-viz-5: #8a6a4a;
+  --dc-viz-other: #7c7c85;
 }
 
 @supports (background-color: color-mix(in srgb, black, white)) {
