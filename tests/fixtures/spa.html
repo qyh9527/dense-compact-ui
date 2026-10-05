@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="zh-CN" class="dc-workbench" data-theme="zinc-graphite-dark">
+<head>
+<meta charset="utf-8">
+<title>dense-audit SPA 样例</title>
+<link rel="stylesheet" href="../../assets/tokens.css">
+<style>
+/* 模拟单页应用：load 之后 1.5 秒才异步渲染出表格，供 tests/browser.test.mjs 验证 --wait-for。
+ * 表格里 td 是 11px，渲染出来就应触发 DC001；加载壳里没有任何违规。 */
+html.dc-workbench {
+  background: var(--dc-canvas);
+  color: var(--dc-text);
+}
+body {
+  margin: 0;
+  font: var(--dc-text-body)/var(--dc-line-height) var(--dc-font-sans);
+}
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+td {
+  height: var(--dc-row-height);
+  padding: 0 var(--dc-space-3);
+  border-bottom: 1px solid var(--dc-border);
+  font-size: 11px;
+}
+</style>
+</head>
+<body>
+<div id="app"><span>加载中</span></div>
+<script>
+window.addEventListener('load', function () {
+  setTimeout(function () {
+    var rows = '';
+    for (var i = 1; i <= 6; i++) rows += '<tr><td>订单 ' + i + '</td><td>备注 ' + i + '</td></tr>';
+    document.getElementById('app').innerHTML = '<table><tbody>' + rows + '</tbody></table>';
+  }, 1500);
+});
+</script>
+</body>
+</html>

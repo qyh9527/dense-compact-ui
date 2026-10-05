@@ -17,6 +17,8 @@
   var SCHEMA = 'dense-audit-v1';
   var DEFAULT_MAX_FINDINGS = 200;
   var MAX_NODES = 20000;
+  /* DC007 求并集的矩形个数上限，超出时退回逐个相加。 */
+  var MAX_UNION_RECTS = 2000;
 
   var LIMITS = [
     '只覆盖当前视口与状态',
@@ -96,6 +98,41 @@
     if (!/^[+\-−.,:%$¥€£\d]+[A-Za-z]{0,3}$/.test(s)) return false;
     var digits = s.match(/\d/g);
     return !!digits && digits.length >= 2;
+  }
+
+  /* 矩形 [x1, y1, x2, y2] 并集面积：x 坐标离散化，每段区间内对 y 区间排序合并后累加。O(n² log n)。 */
+  function unionArea(rects) {
+    if (!rects.length) return 0;
+    var xs = [];
+    rects.forEach(function (q) { xs.push(q[0], q[2]); });
+    xs.sort(function (a, b) { return a - b; });
+    var total = 0;
+    for (var k = 0; k + 1 < xs.length; k++) {
+      var xa = xs[k];
+      var xb = xs[k + 1];
+      if (xb <= xa) continue;
+      var spans = [];
+      rects.forEach(function (q) {
+        if (q[0] <= xa && q[2] >= xb) spans.push([q[1], q[3]]);
+      });
+      if (!spans.length) continue;
+      spans.sort(function (a, b) { return a[0] - b[0]; });
+      var covered = 0;
+      var curStart = spans[0][0];
+      var curEnd = spans[0][1];
+      for (var s = 1; s < spans.length; s++) {
+        if (spans[s][0] > curEnd) {
+          covered += curEnd - curStart;
+          curStart = spans[s][0];
+          curEnd = spans[s][1];
+        } else if (spans[s][1] > curEnd) {
+          curEnd = spans[s][1];
+        }
+      }
+      covered += curEnd - curStart;
+      total += covered * (xb - xa);
+    }
+    return total;
   }
 
   function median(nums) {
@@ -268,7 +305,8 @@
    *   border4  四边都有可见边框；shadow  有 box-shadow
    *   form     表单控件；inter 可交互；disabled 已禁用
    *   inlinePara  位于文本段落内的内联链接
-   *   trunc    text-overflow: ellipsis 且内容确实被截断 */
+   *   trunc    text-overflow: ellipsis 且内容确实被截断
+   *   inCell   自身或祖先是单元格（td、th、role=gridcell|cell），向上只找到最近的 table、grid、treegrid 为止 */
   function collect(win, doc, opts) {
     opts = opts || {};
     var rootEl = opts.root ? doc.querySelector(opts.root) : doc.documentElement;
@@ -335,6 +373,17 @@
       return { any: any, numeric: any && isNumericText(text) };
     }
 
+    /* 自身或祖先是单元格（td、th、role=gridcell|cell）；祖先只向上找到最近的 table、grid、treegrid 为止。
+     * 借父 record 的结果递推，不必每个节点重新向上爬。 */
+    function inCellOf(el, tag, role, parentIdx) {
+      if (CELL_TAGS[tag] || BODY_ROLES[role]) return true;
+      var par = el.parentElement;
+      if (!par || parentIdx < 0) return false;
+      var pRole = (par.getAttribute('role') || '').trim().toLowerCase().split(/\s+/)[0];
+      if (par.localName === 'table' || pRole === 'grid' || pRole === 'treegrid') return false;
+      return !!records[parentIdx].inCell;
+    }
+
     function makeRecord(el, parentIdx, outside) {
       var cs = win.getComputedStyle(el);
       var tag = el.localName;
@@ -387,7 +436,8 @@
         inter: false,
         disabled: false,
         inlinePara: false,
-        trunc: false
+        trunc: false,
+        inCell: inCellOf(el, tag, role, parentIdx)
       };
 
       var bg = normalize(cs.backgroundColor);
@@ -554,7 +604,7 @@
     ['accent', 'success', 'warning', 'danger', 'special'].forEach(function (k) {
       accentSet[tk.colors[k]] = true;
     });
-    var accentArea = 0;
+    var accentRects = [];
 
     /* ---- DC012 用：分组 ---- */
     var primaryGroups = {};
@@ -623,9 +673,9 @@
       }
 
       /* DC005 数字未等宽 */
-      if ((isCell || hasToken(droles, 'number')) && r.num && String(r.fvn || '').indexOf('tabular-nums') < 0) {
+      if ((isCell || r.inCell || hasToken(droles, 'number')) && r.num && String(r.fvn || '').indexOf('tabular-nums') < 0) {
         add('DC005', i, r.fvn || 'normal',
-          '数字所在单元格没有 font-variant-numeric: tabular-nums。复核：字体本身是否已等宽。');
+          '数字所在单元格（含单元格里的后代元素）没有 font-variant-numeric: tabular-nums。复核：字体本身是否已等宽。');
       }
 
       /* DC007 累计强调色面积（嵌套只算最外层） */
@@ -635,7 +685,7 @@
         var y1 = Math.max(r.rect.y, 0);
         var x2 = Math.min(r.rect.x + r.rect.width, vw);
         var y2 = Math.min(r.rect.y + r.rect.height, vh);
-        if (x2 > x1 && y2 > y1) accentArea += (x2 - x1) * (y2 - y1);
+        if (x2 > x1 && y2 > y1) accentRects.push([x1, y1, x2, y2]);
       }
 
       /* DC008 触屏热区 */
@@ -709,7 +759,15 @@
       }
     });
 
-    /* DC007 */
+    /* DC007：相互重叠的强调色矩形按并集面积算；个数超限时退回逐个相加。 */
+    var accentArea = 0;
+    var accentApprox = false;
+    if (accentRects.length > MAX_UNION_RECTS) {
+      accentApprox = true;
+      accentRects.forEach(function (q) { accentArea += (q[2] - q[0]) * (q[3] - q[1]); });
+    } else {
+      accentArea = unionArea(accentRects);
+    }
     var viewportArea = vw * vh;
     var accentRatio = viewportArea > 0 ? Math.round(accentArea / viewportArea * 1000) / 1000 : 0;
     if (accentRatio > 0.1) {
@@ -772,6 +830,15 @@
     var all = [];
     order.forEach(function (id) { all = all.concat(buckets[id]); });
 
+    var metrics = {
+      accentRatio: accentRatio,
+      fontSizes: sortedHist(fontHist),
+      radii: sortedHist(radiusHist),
+      offScale: offScale,
+      lists: lists
+    };
+    if (accentApprox) metrics.accentApprox = true;
+
     return {
       schema: SCHEMA,
       context: {
@@ -782,13 +849,7 @@
         root: rootSel
       },
       findings: all.slice(0, maxFindings),
-      metrics: {
-        accentRatio: accentRatio,
-        fontSizes: sortedHist(fontHist),
-        radii: sortedHist(radiusHist),
-        offScale: offScale,
-        lists: lists
-      },
+      metrics: metrics,
       truncated: all.length > maxFindings,
       totalFindings: all.length,
       limits: LIMITS.slice()

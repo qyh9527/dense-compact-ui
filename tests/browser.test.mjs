@@ -30,6 +30,76 @@ function runCli(args) {
   });
 }
 
+test('真实浏览器：SPA 在 load 之后才渲染时的就绪等待', { timeout: STEP_TIMEOUT }, async (t) => {
+  if (!findBrowser()) {
+    t.skip(SKIP_REASON);
+    return;
+  }
+
+  await t.test('waitFor: table 等到表格出现后检出 DC001，并记录 ready', async () => {
+    const started = Date.now();
+    const { report, htmlLengthBefore, htmlLengthAfter } = await runAudit({
+      target: fixture('spa.html'), waitFor: 'table',
+    });
+    t.diagnostic(`waitFor: table -> ready=${JSON.stringify(report.context.ready)}，总用时 ${Date.now() - started}ms`);
+    const dc001 = report.findings.filter((f) => f.rule === 'DC001');
+    assert.ok(dc001.length >= 1, `应检出 DC001：${JSON.stringify(ruleCounts(report))}`);
+    assert.equal(report.context.ready.waitFor, 'table');
+    assert.equal(report.context.ready.settled, true);
+    assert.ok(report.context.ready.waitedMs >= 1000, `应至少等到表格渲染（约 1.5 秒），实际 ${report.context.ready.waitedMs}ms`);
+    assert.equal(htmlLengthAfter, htmlLengthBefore, '等待与审计不得改动 DOM');
+  });
+
+  for (const sel of ['#hidden-v', '#hidden-o']) {
+    await t.test(`waitFor 的目标已存在但被 ${sel === '#hidden-v' ? 'visibility: hidden' : 'opacity: 0'} 藏着：等到显示后才审计`, async () => {
+      const { report } = await runAudit({ target: fixture('spa-hidden.html'), waitFor: sel, settle: 200 });
+      t.diagnostic(`${sel} -> ready=${JSON.stringify(report.context.ready)}`);
+      assert.ok(report.context.ready.waitedMs >= 1000, `应等到约 1.5 秒后显示，实际 ${report.context.ready.waitedMs}ms`);
+      assert.ok(report.findings.some((f) => f.rule === 'DC001'), `显示后的表格应检出 DC001：${JSON.stringify(ruleCounts(report))}`);
+    });
+  }
+
+  await t.test('默认 settle、不传 waitFor：1.5 秒内 DOM 没有变化，表格出现前就判定静默', async () => {
+    const started = Date.now();
+    const { report } = await runAudit({ target: fixture('spa.html') });
+    t.diagnostic(`默认 settle -> ready=${JSON.stringify(report.context.ready)}，检出 ${JSON.stringify(ruleCounts(report))}，总用时 ${Date.now() - started}ms`);
+    // 不对检出结果下结论：它取决于静默窗口与渲染时刻的先后，这正是该用 waitFor 的原因。
+    assert.equal(report.context.ready.settled, true);
+    assert.equal(report.context.ready.waitFor, null);
+    assert.equal(typeof report.context.ready.waitedMs, 'number');
+  });
+
+  await t.test('settle: 0 跳过静默等待', async () => {
+    const { report } = await runAudit({ target: fixture('spa.html'), settle: 0 });
+    t.diagnostic(`settle: 0 -> ready=${JSON.stringify(report.context.ready)}`);
+    assert.equal(report.context.ready.settled, false, '跳过时没有验证过静默');
+    assert.ok(report.context.ready.waitedMs < 400, `跳过静默窗口应很快返回，实际 ${report.context.ready.waitedMs}ms`);
+  });
+
+  await t.test('waitFor 的选择器一直不存在：超时后抛出含选择器的中文错误', async () => {
+    const started = Date.now();
+    await assert.rejects(
+      runAudit({ target: fixture('spa.html'), waitFor: '#no-such-element', waitTimeoutMs: 2000 }),
+      (err) => /超时/.test(err.message) && err.message.includes('#no-such-element'),
+    );
+    t.diagnostic(`不存在的选择器 2000ms 超时，实际用时 ${Date.now() - started}ms`);
+  });
+
+  await t.test('CLI：--wait-for 与 --settle 生效，ready 写进报告', () => {
+    const result = runCli([fixture('spa.html'), '--wait-for', 'table', '--settle', '200']);
+    assert.equal(result.status, 1, `退出码应为 1，stderr：${result.stderr}`);
+    const { context } = JSON.parse(result.stdout);
+    assert.equal(context.ready.waitFor, 'table');
+    assert.equal(context.ready.settled, true);
+  });
+
+  await t.test('CLI：--settle 需要非负整数', () => {
+    const result = runCli([fixture('spa.html'), '--settle', '-1']);
+    assert.equal(result.status, 2);
+    assert.match(result.stderr, /--settle/);
+  });
+});
+
 test('真实浏览器：dense-audit.js 对 fixture 的检出', { timeout: STEP_TIMEOUT }, async (t) => {
   if (!findBrowser()) {
     t.skip(SKIP_REASON);
@@ -52,6 +122,10 @@ test('真实浏览器：dense-audit.js 对 fixture 的检出', { timeout: STEP_T
     for (const rule of ['DC001', 'DC003', 'DC005', 'DC007', 'DC008', 'DC010', 'DC012', 'DC013']) {
       assert.ok(counts[rule] >= 1, `${rule} 应至少检出一条，实际计数 ${JSON.stringify(counts)}`);
     }
+    assert.ok(
+      report.findings.some((f) => f.rule === 'DC005' && f.selector === '#dc005-span'),
+      `DC005 应检出单元格里的数字 span：${JSON.stringify(report.findings.filter((f) => f.rule === 'DC005').map((f) => f.selector))}`,
+    );
     // 横幅 1280 宽，高 120 加上下 padding 各 12 共 144，占 1280×720 视口的 20%。
     assert.equal(report.metrics.accentRatio, 0.2);
     assert.ok(report.metrics.offScale.fontSizes.includes('11'), '11px 应列入 offScale.fontSizes');
