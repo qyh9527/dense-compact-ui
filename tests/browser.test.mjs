@@ -2,6 +2,8 @@
 // 把 scripts/dense-audit.js 注入 fixture 页面执行，检查报告；并真实执行 CLI 检查退出码。
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -97,6 +99,25 @@ test('真实浏览器：dense-audit.js 对 fixture 的检出', { timeout: STEP_T
     const result = runCli([fixture('clean.html'), '--touch', '--width', '1280', '--height', '720']);
     assert.equal(result.status, 0, `退出码应为 0，stderr：${result.stderr}`);
     assert.deepEqual(JSON.parse(result.stdout).findings, []);
+  });
+
+  await t.test('CLI：经目录链接运行（cc-switch 等以软链接安装技能）仍输出报告', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dense-audit-link-'));
+    const link = path.join(tmp, 'scripts');
+    try {
+      fs.symlinkSync(path.dirname(cli), link, 'junction');
+      const result = spawnSync(process.execPath, [path.join(link, 'run-audit.mjs'), fixture('clean.html'), '--touch'], {
+        encoding: 'utf8',
+        timeout: STEP_TIMEOUT,
+        maxBuffer: 16 * 1024 * 1024,
+      });
+      assert.equal(result.status, 0, `退出码应为 0，stderr：${result.stderr}`);
+      assert.equal(JSON.parse(result.stdout).schema, 'dense-audit-v1');
+    } finally {
+      // 先只拆链接本身，避免递归删除顺着链接进到 scripts/
+      try { fs.unlinkSync(link); } catch { try { fs.rmdirSync(link); } catch { /* 链接未建成 */ } }
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
   });
 
   await t.test('CLI：导航失败时 10 秒内以退出码 2 结束', () => {
