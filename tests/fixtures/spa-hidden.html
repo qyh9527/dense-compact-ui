@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="zh-CN" class="dc-workbench" data-theme="zinc-graphite-dark">
+<head>
+<meta charset="utf-8">
+<title>dense-audit 隐藏占位样例</title>
+<link rel="stylesheet" href="../../assets/tokens.css">
+<style>
+/* 目标元素在 load 时已存在，但分别用 visibility: hidden 与 opacity: 0 藏着；
+ * 1.5 秒后填入表格并显示。--wait-for 必须等到显示后才算满足。 */
+html.dc-workbench {
+  background: var(--dc-canvas);
+  color: var(--dc-text);
+}
+body {
+  margin: 0;
+  font: var(--dc-text-body)/var(--dc-line-height) var(--dc-font-sans);
+}
+.slot {
+  min-height: 40px;
+}
+#hidden-v {
+  visibility: hidden;
+}
+#hidden-o {
+  opacity: 0;
+}
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+td {
+  height: var(--dc-row-height);
+  padding: 0 var(--dc-space-3);
+  border-bottom: 1px solid var(--dc-border);
+  font-size: 11px;
+}
+</style>
+</head>
+<body>
+<div id="hidden-v" class="slot"></div>
+<div id="hidden-o" class="slot"></div>
+<script>
+window.addEventListener('load', function () {
+  setTimeout(function () {
+    var rows = '';
+    for (var i = 1; i <= 6; i++) rows += '<tr><td>订单 ' + i + '</td><td>备注 ' + i + '</td></tr>';
+    var v = document.getElementById('hidden-v');
+    var o = document.getElementById('hidden-o');
+    v.innerHTML = '<table><tbody>' + rows + '</tbody></table>';
+    o.innerHTML = '<table><tbody>' + rows + '</tbody></table>';
+    v.style.visibility = 'visible';
+    o.style.opacity = '1';
+  }, 1500);
+});
+</script>
+</body>
+</html>

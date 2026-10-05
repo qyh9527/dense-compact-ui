@@ -50,6 +50,15 @@ test('真实浏览器：SPA 在 load 之后才渲染时的就绪等待', { timeo
     assert.equal(htmlLengthAfter, htmlLengthBefore, '等待与审计不得改动 DOM');
   });
 
+  for (const sel of ['#hidden-v', '#hidden-o']) {
+    await t.test(`waitFor 的目标已存在但被 ${sel === '#hidden-v' ? 'visibility: hidden' : 'opacity: 0'} 藏着：等到显示后才审计`, async () => {
+      const { report } = await runAudit({ target: fixture('spa-hidden.html'), waitFor: sel, settle: 200 });
+      t.diagnostic(`${sel} -> ready=${JSON.stringify(report.context.ready)}`);
+      assert.ok(report.context.ready.waitedMs >= 1000, `应等到约 1.5 秒后显示，实际 ${report.context.ready.waitedMs}ms`);
+      assert.ok(report.findings.some((f) => f.rule === 'DC001'), `显示后的表格应检出 DC001：${JSON.stringify(ruleCounts(report))}`);
+    });
+  }
+
   await t.test('默认 settle、不传 waitFor：1.5 秒内 DOM 没有变化，表格出现前就判定静默', async () => {
     const started = Date.now();
     const { report } = await runAudit({ target: fixture('spa.html') });

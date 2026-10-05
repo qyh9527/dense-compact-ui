@@ -29,9 +29,20 @@ const SETTLE_CAP = 10_000;
 // 在页面里一次完成：先轮询 waitFor（存在且可见），再等 DOM 连续 settle 毫秒没有变化。
 // 返回 { waitTimedOut, settled }；Observer 用完即 disconnect，不留 DOM 改动。
 const READY_PROBE = `(async (sel, settle, waitTimeout, settleCap) => {
-  const visible = (el) => typeof el.checkVisibility === 'function'
-    ? el.checkVisibility()
-    : el.getClientRects().length > 0;
+  // 与 dense-audit.js 同一口径：有尺寸，且 display / visibility / opacity 都没把它藏起来。
+  const visible = (el) => {
+    const r = el.getBoundingClientRect();
+    if (!(r.width > 0 && r.height > 0)) return false;
+    if (typeof el.checkVisibility === 'function') {
+      return el.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true });
+    }
+    if (getComputedStyle(el).visibility !== 'visible') return false;
+    for (let n = el; n; n = n.parentElement) {
+      const cs = getComputedStyle(n);
+      if (cs.display === 'none' || Number(cs.opacity) === 0) return false;
+    }
+    return true;
+  };
   if (sel) {
     const t0 = performance.now();
     for (;;) {
