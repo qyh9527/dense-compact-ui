@@ -15,10 +15,6 @@ on:
       - references/**
       - assets/**
       - agents/**
-      - scripts/**
-      - package.json
-      - package-lock.json
-      - .gitattributes
   workflow_dispatch:
     inputs:
       bump:
