@@ -9,7 +9,9 @@ description: 紧凑高信息密度界面的设计、实现与评审指导：高�
 
 审计、评审、打磨、精简或加固已有界面时，先读 [quality-workflow.md](references/quality-workflow.md) 选择路径与完成条件；只要求审计或评审时只报告，要求修复时再改文件。
 
-## 1. 先确认是否采用
+## 1. 先判页面任务，再确认是否采用
+
+先读 [context.md](references/context.md)，按当前页面的主要任务判为 operate（操作）、read（阅读）、persuade（说服）或 experience（体验）。operate 推荐完整空间体系，但页面模式不代替用户选择；read 默认只借用阅读、响应式与可达性检查；persuade / experience 默认不采用紧凑视觉体系。混合页面按区域划分，已有确认继续有效。
 
 本技能会被宽泛的前端 / UI / UX 关键词加载，加载不等于用户要这种风格。
 
@@ -23,12 +25,14 @@ description: 紧凑高信息密度界面的设计、实现与评审指导：高�
 
 ## 2. 判读与准备
 
-1. **先说判读。** 动手前在回复里写一行：「判读：<界面> 给 <用户>，设备 <桌面鼠标 / 手机触屏 / 两者>，主要任务 <…>，总览 <需要一页看全 N 项 / 只看局部>，密度 <dense（默认）/ compact / comfortable>，主题 <Zinc Graphite Dark / 沿用项目>，<新建 / 改版·保留 / 改版·重做>。」判读可能和需求有出入时只问一个问题；能确定就不问。设备以用户对本项目的说明为准；通用指令要求的平台和它冲突时，问一次并写进判读。
-2. **读现状。** 已有项目先找 DESIGN.md、tokens、Tailwind 配置或组件库主题，沿用其命名与形状语言；技术栈和依赖从项目文件识别，不假定。
+1. **先说判读。** 动手前在回复里写一行：「判读：<界面> 给 <用户>，平台 <Web / 桌面 / 原生 / 跨平台>，输入 <鼠标键盘 / 触屏 / 两者>，主要任务 <…>，总览 <需要一页看全 N 项 / 只看局部>，密度 <dense（默认）/ compact / comfortable>，主题 <Zinc Graphite Dark / 沿用项目>，<新建 / 改版·保留 / 改版·重做>。」判读可能和需求有出入时只问一个问题；能确定就不问。设备以用户对本项目的说明为准；通用指令要求的平台和它冲突时，问一次并写进判读。
+2. **读上下文。** 按 [context.md](references/context.md) 先读现有产品事实，再读 DESIGN.md 与页面约定，最后核对组件和 token；已有文档沿用原路径，不强制新建 PRODUCT.md。技术栈和单位从项目文件识别，不假定浏览器、Tailwind 或 CSS。
 3. **列任务。** 写清用户要看什么、做什么、哪些上下文切换后必须保留；操作按频率分成常驻 / 按需展开 / 收进具名入口。
 4. **定空间预算。** 列表、表格、树这类重复对象的视图，把预算贴在回复里、判读下面：折叠态的列（字段、宽度、截断方式）、折叠态行高、展开后放什么、内容区宽度、一页全量还是分页及理由（概念见 [layout-density.md](references/layout-density.md) 的「行模型」）。列和行高都写出具体值后再动手。按这个顺序定，前一步的结论约束后一步：设备与任务 → 总览需求 → 默认列 → 行高与宽度预算 → 性能策略 → 主题与装饰。交给别人实现时，委派里附上这份预算。
 
 ## 3. 不变的底线
+
+以下 px 是 Web 起点。原生和跨平台按布局单位、字体缩放和平台热区规范映射，具体见 platforms.md；空间预算与验证不能用 CSS 尺寸代替实际渲染和命中区域。
 
 - 目标是同一块屏幕里能看懂、能点到的有效信息更多。紧凑来自空间组织，不靠缩字：正文 ≥13px，不用负字距。
 - 默认高密档（行 24px / 控件视觉高 22px / 正文 13px），区域不包卡片，用 1px 分隔线分区；组件越密，分组间距越要拉开；工具栏、表头、数据行同档，同档指最小高度，文字放大时条带自己撑高。
@@ -70,7 +74,8 @@ description: 紧凑高信息密度界面的设计、实现与评审指导：高�
 | 设置页：分组、搜索、保存方式、恢复默认 | [settings.md](references/settings.md) |
 | 改版已有界面、项目已有组件库 | [redesign.md](references/redesign.md) |
 | 审计、设计评审、打磨、精简、边界加固；问题证据、优先级与复验 | [quality-workflow.md](references/quality-workflow.md) |
-| 与 Impeccable 配合、处理其检测告警或设计建议冲突 | [impeccable.md](references/impeccable.md) |
+| 产品与视觉上下文、页面模式、跨平台验证 | [context.md](references/context.md) |
+| 自动检查、源码与测量证据、可选工具 Hook | [detector.md](references/detector.md) |
 | Tailwind、shadcn、Ant Design、Element Plus、MUI 等落地密度与主题（含配置片段） | [stacks.md](references/stacks.md) |
 | 选图标库、图标尺寸、操作对应的图标 | [icons.md](references/icons.md) |
 | 动效：弹出层、展开收起、列表增删、视图切换、拖拽 | [motion.md](references/motion.md) |
@@ -78,13 +83,13 @@ description: 紧凑高信息密度界面的设计、实现与评审指导：高�
 | 品牌字体、网络字体加载、中文字体 | [fonts.md](references/fonts.md) |
 | 登录、注册、找回密码、验证码、通行密钥 | [auth.md](references/auth.md) |
 | 整理一页 DESIGN.md | [design-md.md](references/design-md.md) |
-| 某条规则的出处与取舍 | [sources.md](references/sources.md) |
+| 标准、平台指南与组件 API | [sources.md](references/sources.md) |
 
 界面类型表里的名称对应 references/ 下的同名 `.md` 文件。一个任务涉及多行就各读一次；专题文件末尾的「检查」并入交付前检查。
 
 ## 5. 交付前检查
 
-用真实内容逐项过 [verify.md](references/verify.md)，按判读里的设备取舍检查项（规则见 verify.md 的「边界场景」）。交付时把检查结果贴在回复里，每项标「预览验证 / 静态检查 / 未验证」；没贴出检查结果，不算完成。最低要求：
+按 [context.md](references/context.md) 选择平台验证工具，并按 quality-workflow.md 集中检查、批量修复、确认后停止。用真实内容逐项过 [verify.md](references/verify.md)，按判读里的设备取舍检查项（规则见 verify.md 的「边界场景」）。交付时把检查结果贴在回复里，每项标「预览验证 / 静态检查 / 未验证」；没贴出检查结果，不算完成。最低要求：
 
 - [ ] 长内容、200% 文字缩放、矮视口时核心任务都能完成；设备含手机时再查窄到 360px 和软键盘弹出，只用于桌面时查小窗口（如 1280×720）
 - [ ] 重复对象视图量过折叠态行高、一屏可辨认的项数和内容区宽度利用（见 verify.md 的「评价方式」）
