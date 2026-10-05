@@ -6,9 +6,23 @@
 
 Agent 加载技能后会先问你是否采用这种风格；你已经明确要求紧凑或高密度时直接使用。海报、营销落地页这类追求视觉张扬的页面不适用。
 
+## 色板
+
+新建项目默认 Zinc Graphite Dark；Zinc Light 是可切换的浅色附加版。彩色只表达语义，强调色总面积不超过 10%，图表分类色只用于图表。完整变量与对比度说明见 [`assets/tokens.css`](assets/tokens.css) 和 [配色规则](references/color.md)。
+
+![Zinc Graphite Dark 与 Zinc Light 主题色板](assets/palette.svg)
+
 ## 安装
 
 把本仓库作为一个技能目录放进 Claude Code / Codex 的 skills 目录（仓库根即技能根，入口为 `SKILL.md`），或在 [cc-switch](https://github.com/farion1231/cc-switch) 中以 `qyh9527/dense-compact-ui` 添加。
+
+## 审计与改进
+
+可以直接说「只评审这个工作台」「打磨筛选栏」「精简重复包装，但保留比较列」或「补齐失败恢复」。Agent 会按任务选择检查路径，给出带位置、证据、影响和复验方法的问题；仅评审时不改文件，明确要求修复时继续实施；结束前会把前后截图并排做一次观感检查。详见 [审计与定向改进](references/quality-workflow.md)。
+
+核心工作流适用于 Web、桌面、原生与跨平台前端，按页面任务选择空间体系，分开维护产品事实与视觉约定。验证工具和测量单位按平台选择，浏览器不是前提。
+
+设计依据与取舍记录在 [docs/design-rationale.md](https://github.com/qyh9527/dense-compact-ui/blob/main/docs/design-rationale.md)，供维护者修改主题、密度或动效前查看，不进入发布包。
 
 ## 版本
 

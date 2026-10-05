@@ -1,0 +1,164 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="728" height="408" viewBox="0 0 728 408" role="img" aria-label="Zinc Graphite Dark 与 Zinc Light 主题色板">
+  <rect x="0.5" y="0.5" width="359" height="407" rx="10" fill="#191A1B" stroke="#45464B"/>
+  <text x="12" y="23" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, Roboto, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif" font-size="13" font-weight="600" fill="#FAFAFA">Zinc Graphite Dark</text>
+  <text x="348" y="23" text-anchor="end" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, Roboto, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif" font-size="12" fill="#A1A1AA">默认</text>
+  <line x1="1" y1="36.5" x2="359" y2="36.5" stroke="#2E2F33"/>
+  <rect x="12.5" y="41.5" width="13" height="13" rx="4" fill="#191A1B" stroke="#7A7B82" stroke-opacity="0.6"/>
+  <text x="36" y="52" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, Roboto, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif" font-size="13" fill="#FAFAFA">画布</text>
+  <text x="150" y="52" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, Consolas, monospace" font-size="12" fill="#A1A1AA">--dc-canvas</text>
+  <text x="348" y="52" text-anchor="end" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, Consolas, monospace" font-size="12" fill="#D4D4D8">#191A1B</text>
+  <line x1="1" y1="60.5" x2="359" y2="60.5" stroke="#2E2F33"/>
+  <rect x="12.5" y="65.5" width="13" height="13" rx="4" fill="#212225" stroke="#7A7B82" stroke-opacity="0.6"/>
+  <text x="36" y="76" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, Roboto, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif" font-size="13" fill="#FAFAFA">表面</text>
+  <text x="150" y="76" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, Consolas, monospace" font-size="12" fill="#A1A1AA">--dc-surface</text>
+  <text x="348" y="76" text-anchor="end" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, Consolas, monospace" font-size="12" fill="#D4D4D8">#212225</text>
+  <line x1="1" y1="84.5" x2="359" y2="84.5" stroke="#2E2F33"/>
+  <rect x="12.5" y="89.5" width="13" height="13" rx="4" fill="#28292C" stroke="#7A7B82" stroke-opacity="0.6"/>
+  <text x="36" y="100" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, Roboto, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif" font-size="13" fill="#FAFAFA">浮起</text>
+  <text x="150" y="100" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, Consolas, monospace" font-size="12" fill="#A1A1AA">--dc-raised</text>
+  <text x="348" y="100" text-anchor="end" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, Consolas, monospace" font-size="12" fill="#D4D4D8">#28292C</text>
+  <line x1="1" y1="108.5" x2="359" y2="108.5" stroke="#2E2F33"/>
+  <rect x="12.5" y="113.5" width="13" height="13" rx="4" fill="#2E2F33" stroke="#7A7B82" stroke-opacity="0.6"/>
+  <text x="36" y="124" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, Roboto, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif" font-size="13" fill="#FAFAFA">分隔线</text>
+  <text x="150" y="124" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, Consolas, monospace" font-size="12" fill="#A1A1AA">--dc-border</text>
+  <text x="348" y="124" text-anchor="end" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, Consolas, monospace" font-size="12" fill="#D4D4D8">#2E2F33</text>
+  <line x1="1" y1="132.5" x2="359" y2="132.5" stroke="#2E2F33"/>
+  <rect x="12.5" y="137.5" width="13" height="13" rx="4" fill="#7A7B82" stroke="#7A7B82" stroke-opacity="0.6"/>
+  <text x="36" y="148" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, Roboto, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif" font-size="13" fill="#FAFAFA">控件边框</text>
+  <text x="150" y="148" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, Consolas, monospace" font-size="12" fill="#A1A1AA">--dc-border-control</text>
+  <text x="348" y="148" text-anchor="end" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, Consolas, monospace" font-size="12" fill="#D4D4D8">#7A7B82</text>
+  <line x1="1" y1="156.5" x2="359" y2="156.5" stroke="#2E2F33"/>
+  <rect x="12.5" y="161.5" width="13" height="13" rx="4" fill="#FAFAFA" stroke="#7A7B82" stroke-opacity="0.6"/>
+  <text x="36" y="172" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, Roboto, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif" font-size="13" fill="#FAFAFA">正文</text>
+  <text x="150" y="172" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, Consolas, monospace" font-size="12" fill="#A1A1AA">--dc-text</text>
+  <text x="348" y="172" text-anchor="end" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, Consolas, monospace" font-size="12" fill="#D4D4D8">#FAFAFA</text>
+  <line x1="1" y1="180.5" x2="359" y2="180.5" stroke="#2E2F33"/>
+  <rect x="12.5" y="185.5" width="13" height="13" rx="4" fill="#A1A1AA" stroke="#7A7B82" stroke-opacity="0.6"/>
+  <text x="36" y="196" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, Roboto, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif" font-size="13" fill="#FAFAFA">次要文字</text>
+  <text x="150" y="196" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, Consolas, monospace" font-size="12" fill="#A1A1AA">--dc-text-muted</text>
+  <text x="348" y="196" text-anchor="end" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, Consolas, monospace" font-size="12" fill="#D4D4D8">#A1A1AA</text>
+  <line x1="1" y1="204.5" x2="359" y2="204.5" stroke="#2E2F33"/>
+  <rect x="12.5" y="209.5" width="13" height="13" rx="4" fill="#71717A" stroke="#7A7B82" stroke-opacity="0.6"/>
+  <text x="36" y="220" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, Roboto, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif" font-size="13" fill="#FAFAFA">弱化文字</text>
+  <text x="150" y="220" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, Consolas, monospace" font-size="12" fill="#A1A1AA">--dc-text-dim</text>
+  <text x="348" y="220" text-anchor="end" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, Consolas, monospace" font-size="12" fill="#D4D4D8">#71717A</text>
+  <line x1="1" y1="228.5" x2="359" y2="228.5" stroke="#2E2F33"/>
+  <rect x="12.5" y="233.5" width="13" height="13" rx="4" fill="#FAFAFA" stroke="#7A7B82" stroke-opacity="0.6"/>
+  <text x="36" y="244" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, Roboto, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif" font-size="13" fill="#FAFAFA">主按钮</text>
+  <text x="150" y="244" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, Consolas, monospace" font-size="12" fill="#A1A1AA">--dc-primary-bg</text>
+  <text x="348" y="244" text-anchor="end" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, Consolas, monospace" font-size="12" fill="#D4D4D8">#FAFAFA</text>
+  <line x1="1" y1="252.5" x2="359" y2="252.5" stroke="#2E2F33"/>
+  <rect x="12.5" y="257.5" width="13" height="13" rx="4" fill="#58A6FF" stroke="#7A7B82" stroke-opacity="0.6"/>
+  <text x="36" y="268" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, Roboto, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif" font-size="13" fill="#FAFAFA">强调 / 焦点</text>
+  <text x="150" y="268" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, Consolas, monospace" font-size="12" fill="#A1A1AA">--dc-accent</text>
+  <text x="348" y="268" text-anchor="end" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, Consolas, monospace" font-size="12" fill="#D4D4D8">#58A6FF</text>
+  <line x1="1" y1="276.5" x2="359" y2="276.5" stroke="#2E2F33"/>
+  <rect x="12.5" y="281.5" width="13" height="13" rx="4" fill="#3FB950" stroke="#7A7B82" stroke-opacity="0.6"/>
+  <text x="36" y="292" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, Roboto, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif" font-size="13" fill="#FAFAFA">成功</text>
+  <text x="150" y="292" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, Consolas, monospace" font-size="12" fill="#A1A1AA">--dc-success</text>
+  <text x="348" y="292" text-anchor="end" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, Consolas, monospace" font-size="12" fill="#D4D4D8">#3FB950</text>
+  <line x1="1" y1="300.5" x2="359" y2="300.5" stroke="#2E2F33"/>
+  <rect x="12.5" y="305.5" width="13" height="13" rx="4" fill="#D29922" stroke="#7A7B82" stroke-opacity="0.6"/>
+  <text x="36" y="316" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, Roboto, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif" font-size="13" fill="#FAFAFA">警告</text>
+  <text x="150" y="316" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, Consolas, monospace" font-size="12" fill="#A1A1AA">--dc-warning</text>
+  <text x="348" y="316" text-anchor="end" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, Consolas, monospace" font-size="12" fill="#D4D4D8">#D29922</text>
+  <line x1="1" y1="324.5" x2="359" y2="324.5" stroke="#2E2F33"/>
+  <rect x="12.5" y="329.5" width="13" height="13" rx="4" fill="#F85149" stroke="#7A7B82" stroke-opacity="0.6"/>
+  <text x="36" y="340" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, Roboto, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif" font-size="13" fill="#FAFAFA">危险</text>
+  <text x="150" y="340" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, Consolas, monospace" font-size="12" fill="#A1A1AA">--dc-danger</text>
+  <text x="348" y="340" text-anchor="end" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, Consolas, monospace" font-size="12" fill="#D4D4D8">#F85149</text>
+  <line x1="1" y1="348.5" x2="359" y2="348.5" stroke="#2E2F33"/>
+  <rect x="12.5" y="353.5" width="13" height="13" rx="4" fill="#A371F7" stroke="#7A7B82" stroke-opacity="0.6"/>
+  <text x="36" y="364" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, Roboto, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif" font-size="13" fill="#FAFAFA">特殊</text>
+  <text x="150" y="364" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, Consolas, monospace" font-size="12" fill="#A1A1AA">--dc-special</text>
+  <text x="348" y="364" text-anchor="end" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, Consolas, monospace" font-size="12" fill="#D4D4D8">#A371F7</text>
+  <line x1="1" y1="372.5" x2="359" y2="372.5" stroke="#2E2F33"/>
+  <rect x="12" y="377" width="14" height="14" rx="4" fill="#39C5CF"/>
+  <rect x="30" y="377" width="14" height="14" rx="4" fill="#F0883E"/>
+  <rect x="48" y="377" width="14" height="14" rx="4" fill="#A5A5FF"/>
+  <rect x="66" y="377" width="14" height="14" rx="4" fill="#DB61A2"/>
+  <rect x="84" y="377" width="14" height="14" rx="4" fill="#C4A27C"/>
+  <rect x="102" y="377" width="14" height="14" rx="4" fill="#8B8B94"/>
+  <text x="348" y="388" text-anchor="end" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, Roboto, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif" font-size="12" fill="#A1A1AA">图表分类色</text>
+  <rect x="368.5" y="0.5" width="359" height="407" rx="10" fill="#F0F0F2" stroke="#D4D4D8"/>
+  <text x="380" y="23" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, Roboto, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif" font-size="13" font-weight="600" fill="#18181B">Zinc Light</text>
+  <text x="716" y="23" text-anchor="end" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, Roboto, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif" font-size="12" fill="#5F5F69">附加</text>
+  <line x1="369" y1="36.5" x2="727" y2="36.5" stroke="#E4E4E7"/>
+  <rect x="380.5" y="41.5" width="13" height="13" rx="4" fill="#F0F0F2" stroke="#85858D" stroke-opacity="0.6"/>
+  <text x="404" y="52" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, Roboto, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif" font-size="13" fill="#18181B">画布</text>
+  <text x="518" y="52" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, Consolas, monospace" font-size="12" fill="#5F5F69">--dc-canvas</text>
+  <text x="716" y="52" text-anchor="end" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, Consolas, monospace" font-size="12" fill="#3F3F46">#F0F0F2</text>
+  <line x1="369" y1="60.5" x2="727" y2="60.5" stroke="#E4E4E7"/>
+  <rect x="380.5" y="65.5" width="13" height="13" rx="4" fill="#FAFAFA" stroke="#85858D" stroke-opacity="0.6"/>
+  <text x="404" y="76" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, Roboto, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif" font-size="13" fill="#18181B">表面</text>
+  <text x="518" y="76" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, Consolas, monospace" font-size="12" fill="#5F5F69">--dc-surface</text>
+  <text x="716" y="76" text-anchor="end" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, Consolas, monospace" font-size="12" fill="#3F3F46">#FAFAFA</text>
+  <line x1="369" y1="84.5" x2="727" y2="84.5" stroke="#E4E4E7"/>
+  <rect x="380.5" y="89.5" width="13" height="13" rx="4" fill="#FCFCFC" stroke="#85858D" stroke-opacity="0.6"/>
+  <text x="404" y="100" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, Roboto, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif" font-size="13" fill="#18181B">浮起</text>
+  <text x="518" y="100" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, Consolas, monospace" font-size="12" fill="#5F5F69">--dc-raised</text>
+  <text x="716" y="100" text-anchor="end" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, Consolas, monospace" font-size="12" fill="#3F3F46">#FCFCFC</text>
+  <line x1="369" y1="108.5" x2="727" y2="108.5" stroke="#E4E4E7"/>
+  <rect x="380.5" y="113.5" width="13" height="13" rx="4" fill="#E4E4E7" stroke="#85858D" stroke-opacity="0.6"/>
+  <text x="404" y="124" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, Roboto, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif" font-size="13" fill="#18181B">分隔线</text>
+  <text x="518" y="124" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, Consolas, monospace" font-size="12" fill="#5F5F69">--dc-border</text>
+  <text x="716" y="124" text-anchor="end" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, Consolas, monospace" font-size="12" fill="#3F3F46">#E4E4E7</text>
+  <line x1="369" y1="132.5" x2="727" y2="132.5" stroke="#E4E4E7"/>
+  <rect x="380.5" y="137.5" width="13" height="13" rx="4" fill="#85858D" stroke="#85858D" stroke-opacity="0.6"/>
+  <text x="404" y="148" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, Roboto, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif" font-size="13" fill="#18181B">控件边框</text>
+  <text x="518" y="148" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, Consolas, monospace" font-size="12" fill="#5F5F69">--dc-border-control</text>
+  <text x="716" y="148" text-anchor="end" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, Consolas, monospace" font-size="12" fill="#3F3F46">#85858D</text>
+  <line x1="369" y1="156.5" x2="727" y2="156.5" stroke="#E4E4E7"/>
+  <rect x="380.5" y="161.5" width="13" height="13" rx="4" fill="#18181B" stroke="#85858D" stroke-opacity="0.6"/>
+  <text x="404" y="172" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, Roboto, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif" font-size="13" fill="#18181B">正文</text>
+  <text x="518" y="172" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, Consolas, monospace" font-size="12" fill="#5F5F69">--dc-text</text>
+  <text x="716" y="172" text-anchor="end" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, Consolas, monospace" font-size="12" fill="#3F3F46">#18181B</text>
+  <line x1="369" y1="180.5" x2="727" y2="180.5" stroke="#E4E4E7"/>
+  <rect x="380.5" y="185.5" width="13" height="13" rx="4" fill="#5F5F69" stroke="#85858D" stroke-opacity="0.6"/>
+  <text x="404" y="196" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, Roboto, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif" font-size="13" fill="#18181B">次要文字</text>
+  <text x="518" y="196" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, Consolas, monospace" font-size="12" fill="#5F5F69">--dc-text-muted</text>
+  <text x="716" y="196" text-anchor="end" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, Consolas, monospace" font-size="12" fill="#3F3F46">#5F5F69</text>
+  <line x1="369" y1="204.5" x2="727" y2="204.5" stroke="#E4E4E7"/>
+  <rect x="380.5" y="209.5" width="13" height="13" rx="4" fill="#A1A1AA" stroke="#85858D" stroke-opacity="0.6"/>
+  <text x="404" y="220" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, Roboto, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif" font-size="13" fill="#18181B">弱化文字</text>
+  <text x="518" y="220" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, Consolas, monospace" font-size="12" fill="#5F5F69">--dc-text-dim</text>
+  <text x="716" y="220" text-anchor="end" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, Consolas, monospace" font-size="12" fill="#3F3F46">#A1A1AA</text>
+  <line x1="369" y1="228.5" x2="727" y2="228.5" stroke="#E4E4E7"/>
+  <rect x="380.5" y="233.5" width="13" height="13" rx="4" fill="#18181B" stroke="#85858D" stroke-opacity="0.6"/>
+  <text x="404" y="244" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, Roboto, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif" font-size="13" fill="#18181B">主按钮</text>
+  <text x="518" y="244" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, Consolas, monospace" font-size="12" fill="#5F5F69">--dc-primary-bg</text>
+  <text x="716" y="244" text-anchor="end" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, Consolas, monospace" font-size="12" fill="#3F3F46">#18181B</text>
+  <line x1="369" y1="252.5" x2="727" y2="252.5" stroke="#E4E4E7"/>
+  <rect x="380.5" y="257.5" width="13" height="13" rx="4" fill="#0969DA" stroke="#85858D" stroke-opacity="0.6"/>
+  <text x="404" y="268" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, Roboto, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif" font-size="13" fill="#18181B">强调 / 焦点</text>
+  <text x="518" y="268" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, Consolas, monospace" font-size="12" fill="#5F5F69">--dc-accent</text>
+  <text x="716" y="268" text-anchor="end" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, Consolas, monospace" font-size="12" fill="#3F3F46">#0969DA</text>
+  <line x1="369" y1="276.5" x2="727" y2="276.5" stroke="#E4E4E7"/>
+  <rect x="380.5" y="281.5" width="13" height="13" rx="4" fill="#1A7F37" stroke="#85858D" stroke-opacity="0.6"/>
+  <text x="404" y="292" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, Roboto, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif" font-size="13" fill="#18181B">成功</text>
+  <text x="518" y="292" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, Consolas, monospace" font-size="12" fill="#5F5F69">--dc-success</text>
+  <text x="716" y="292" text-anchor="end" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, Consolas, monospace" font-size="12" fill="#3F3F46">#1A7F37</text>
+  <line x1="369" y1="300.5" x2="727" y2="300.5" stroke="#E4E4E7"/>
+  <rect x="380.5" y="305.5" width="13" height="13" rx="4" fill="#9A6700" stroke="#85858D" stroke-opacity="0.6"/>
+  <text x="404" y="316" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, Roboto, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif" font-size="13" fill="#18181B">警告</text>
+  <text x="518" y="316" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, Consolas, monospace" font-size="12" fill="#5F5F69">--dc-warning</text>
+  <text x="716" y="316" text-anchor="end" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, Consolas, monospace" font-size="12" fill="#3F3F46">#9A6700</text>
+  <line x1="369" y1="324.5" x2="727" y2="324.5" stroke="#E4E4E7"/>
+  <rect x="380.5" y="329.5" width="13" height="13" rx="4" fill="#CF222E" stroke="#85858D" stroke-opacity="0.6"/>
+  <text x="404" y="340" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, Roboto, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif" font-size="13" fill="#18181B">危险</text>
+  <text x="518" y="340" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, Consolas, monospace" font-size="12" fill="#5F5F69">--dc-danger</text>
+  <text x="716" y="340" text-anchor="end" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, Consolas, monospace" font-size="12" fill="#3F3F46">#CF222E</text>
+  <line x1="369" y1="348.5" x2="727" y2="348.5" stroke="#E4E4E7"/>
+  <rect x="380.5" y="353.5" width="13" height="13" rx="4" fill="#8250DF" stroke="#85858D" stroke-opacity="0.6"/>
+  <text x="404" y="364" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, Roboto, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif" font-size="13" fill="#18181B">特殊</text>
+  <text x="518" y="364" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, Consolas, monospace" font-size="12" fill="#5F5F69">--dc-special</text>
+  <text x="716" y="364" text-anchor="end" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, Consolas, monospace" font-size="12" fill="#3F3F46">#8250DF</text>
+  <line x1="369" y1="372.5" x2="727" y2="372.5" stroke="#E4E4E7"/>
+  <rect x="380" y="377" width="14" height="14" rx="4" fill="#1B7C83"/>
+  <rect x="398" y="377" width="14" height="14" rx="4" fill="#BC4C00"/>
+  <rect x="416" y="377" width="14" height="14" rx="4" fill="#5A54C9"/>
+  <rect x="434" y="377" width="14" height="14" rx="4" fill="#BF3989"/>
+  <rect x="452" y="377" width="14" height="14" rx="4" fill="#8A6A4A"/>
+  <rect x="470" y="377" width="14" height="14" rx="4" fill="#7C7C85"/>
+  <text x="716" y="388" text-anchor="end" font-family="system-ui, -apple-system, &quot;Segoe UI&quot;, Roboto, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif" font-size="12" fill="#5F5F69">图表分类色</text>
+</svg>
