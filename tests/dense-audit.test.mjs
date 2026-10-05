@@ -63,6 +63,7 @@ function rec(over = {}) {
     disabled: false,
     inlinePara: false,
     trunc: false,
+    inCell: false,
     ...over,
   };
 }
@@ -185,6 +186,31 @@ test('DC005：非单元格需 data-dc-role=number 才检查', () => {
   assert.equal(only(gridcell, 'DC005').length, 1);
 });
 
+test('DC005：单元格里的数字后代（td > span）没有 tabular-nums 告警', () => {
+  const bad = run([
+    rec({ tag: 'td' }),
+    rec({ p: 0, tag: 'span', hasText: true, num: true, inCell: true, fvn: 'normal' }),
+  ]);
+  assert.equal(only(bad, 'DC005').length, 1);
+  assert.equal(only(bad, 'DC005')[0].selector, 'td > span');
+});
+
+test('DC005：单元格里的数字后代 computed 已含 tabular-nums（继承）不告警', () => {
+  const good = run([
+    rec({ tag: 'td', fvn: 'tabular-nums' }),
+    rec({ p: 0, tag: 'span', hasText: true, num: true, inCell: true, fvn: 'tabular-nums' }),
+  ]);
+  assert.equal(only(good, 'DC005').length, 0);
+});
+
+test('DC005：不在单元格里的数字 span 不告警', () => {
+  const outside = run([
+    rec({ tag: 'div' }),
+    rec({ p: 0, tag: 'span', hasText: true, num: true, inCell: false }),
+  ]);
+  assert.equal(only(outside, 'DC005').length, 0);
+});
+
 test('DC008：touch=false 时不出现，touch=true 时 30px 按钮告警', () => {
   const records = [rec({ tag: 'button', inter: true, rect: { x: 0, y: 0, width: 80, height: 30 } })];
   assert.equal(only(run(records, { touch: false }), 'DC008').length, 0);
@@ -279,6 +305,62 @@ test('DC007：只算与视口相交的部分，嵌套同类只算最外层', () 
     rec({ p: 0, bg: 'rgb(63, 185, 80)', rect: { x: 0, y: 0, width: 400, height: 80 } }),
   ]);
   assert.equal(nested.metrics.accentRatio, 0.1, '内层不重复计入');
+});
+
+test('DC007：相互重叠的兄弟按并集面积计算', () => {
+  const accent = 'rgb(88, 166, 255)';
+  const green = 'rgb(63, 185, 80)';
+  // 视口 1000×500 = 500000。
+  // 完全重合的两块各 30000（6%），并集只算一份。
+  const same = run([
+    rec({ bg: accent, rect: { x: 0, y: 0, width: 300, height: 100 } }),
+    rec({ bg: green, rect: { x: 0, y: 0, width: 300, height: 100 } }),
+  ]);
+  assert.equal(same.metrics.accentRatio, 0.06);
+  assert.equal(only(same, 'DC007').length, 0, '重合的两块不应被算成 12% 而告警');
+  assert.equal(same.metrics.accentApprox, undefined);
+  // 部分重叠：A 0-300、B 150-450，高都是 100，并集宽 450 -> 45000。
+  const partial = run([
+    rec({ bg: accent, rect: { x: 0, y: 0, width: 300, height: 100 } }),
+    rec({ bg: green, rect: { x: 150, y: 0, width: 300, height: 100 } }),
+  ]);
+  assert.equal(partial.metrics.accentRatio, 0.09);
+  // 不相交：直接相加，30000 + 30000 = 60000。
+  const apart = run([
+    rec({ bg: accent, rect: { x: 0, y: 0, width: 300, height: 100 } }),
+    rec({ bg: green, rect: { x: 500, y: 200, width: 300, height: 100 } }),
+  ]);
+  assert.equal(apart.metrics.accentRatio, 0.12);
+  assert.equal(only(apart, 'DC007').length, 1);
+  // L 形重叠：x 段不同、y 段需要合并。A 0-200 × 0-100，B 100-300 × 50-150。
+  // 面积 20000 + 20000 - 重叠(100-200 × 50-100 = 5000) = 35000。
+  const shape = run([
+    rec({ bg: accent, rect: { x: 0, y: 0, width: 200, height: 100 } }),
+    rec({ bg: green, rect: { x: 100, y: 50, width: 200, height: 100 } }),
+  ]);
+  assert.equal(shape.metrics.accentRatio, 0.07);
+});
+
+test('DC007：嵌套的父子只算外层', () => {
+  const accent = 'rgb(88, 166, 255)';
+  const nested = run([
+    rec({ bg: accent, rect: { x: 0, y: 0, width: 300, height: 100 } }),
+    rec({ p: 0, bg: accent, rect: { x: 50, y: 10, width: 100, height: 50 } }),
+  ]);
+  assert.equal(nested.metrics.accentRatio, 0.06);
+});
+
+test('DC007：元素超过 2000 个时退回逐个相加并标记 accentApprox', () => {
+  const accent = 'rgb(88, 166, 255)';
+  const recs = [];
+  // 2001 个完全重合的 10×10 小块：求并集应为 100，逐个相加为 200100。
+  for (let k = 0; k < 2001; k++) recs.push(rec({ bg: accent, rect: { x: 0, y: 0, width: 10, height: 10 } }));
+  const report = run(recs, { viewport: { width: 1000, height: 1000 } });
+  assert.equal(report.metrics.accentApprox, true);
+  assert.equal(report.metrics.accentRatio, 0.2, '200100 / 1000000 约 0.2');
+  const few = run(recs.slice(0, 5), { viewport: { width: 1000, height: 1000 } });
+  assert.equal(few.metrics.accentRatio, 0);
+  assert.equal(few.metrics.accentApprox, undefined);
 });
 
 test('ignore：有理由才生效，祖先上的也生效', () => {

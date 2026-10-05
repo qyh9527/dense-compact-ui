@@ -4,7 +4,10 @@
 //
 // 用法：
 //   node scripts/run-audit.mjs <URL 或本地 html 路径> [--touch] [--root <选择器>]
+//                              [--wait-for <选择器>] [--settle 500]
 //                              [--width 1280 --height 720] [--out report.json]
+// --wait-for：load 之后等该选择器存在且可见（上限 60 秒，超时按出错处理）。
+// --settle：再等 DOM 连续这么多毫秒没有变化（默认 500，最多等 10 秒；0 跳过）。
 // 退出码：0 没有告警；1 有告警；2 浏览器、导航或脚本出错（原因写到 stderr）。
 //
 // 也导出 runAudit / findBrowser，供 tests/browser.test.mjs 复用同一套 CDP 逻辑。
@@ -19,6 +22,40 @@ const SCRIPT_PATH = path.join(here, 'dense-audit.js');
 
 // 所有等待的上限。
 const STEP_TIMEOUT = 60_000;
+// 默认的 DOM 静默窗口，以及等静默的总上限。
+const DEFAULT_SETTLE = 500;
+const SETTLE_CAP = 10_000;
+
+// 在页面里一次完成：先轮询 waitFor（存在且可见），再等 DOM 连续 settle 毫秒没有变化。
+// 返回 { waitTimedOut, settled }；Observer 用完即 disconnect，不留 DOM 改动。
+const READY_PROBE = `(async (sel, settle, waitTimeout, settleCap) => {
+  const visible = (el) => typeof el.checkVisibility === 'function'
+    ? el.checkVisibility()
+    : el.getClientRects().length > 0;
+  if (sel) {
+    const t0 = performance.now();
+    for (;;) {
+      const el = document.querySelector(sel);
+      if (el && visible(el)) break;
+      if (performance.now() - t0 >= waitTimeout) return { waitTimedOut: true, settled: false };
+      await new Promise((r) => setTimeout(r, 50));
+    }
+  }
+  if (!(settle > 0)) return { waitTimedOut: false, settled: false };
+  const settled = await new Promise((resolve) => {
+    let quiet;
+    let cap;
+    const finish = (ok) => { obs.disconnect(); clearTimeout(quiet); clearTimeout(cap); resolve(ok); };
+    const obs = new MutationObserver(() => {
+      clearTimeout(quiet);
+      quiet = setTimeout(() => finish(true), settle);
+    });
+    obs.observe(document, { subtree: true, childList: true, attributes: true, characterData: true });
+    quiet = setTimeout(() => finish(true), settle);
+    cap = setTimeout(() => finish(false), settleCap);
+  });
+  return { waitTimedOut: false, settled };
+})`;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -142,13 +179,13 @@ class Cdp {
     return new Cdp(ws);
   }
 
-  send(method, params = {}) {
+  send(method, params = {}, timeoutMs = STEP_TIMEOUT) {
     const id = this.nextId++;
     const reply = new Promise((resolve, reject) => {
       this.pending.set(id, { resolve, reject, method });
     });
     this.ws.send(JSON.stringify({ id, method, params }));
-    return withTimeout(reply, STEP_TIMEOUT, `CDP 请求 ${method}`);
+    return withTimeout(reply, timeoutMs, `CDP 请求 ${method}`);
   }
 
   // 先调用拿到 promise，再触发会产生事件的动作，避免漏掉事件。
@@ -174,8 +211,9 @@ class Cdp {
     return promise;
   }
 
-  async evaluate(expression) {
-    const result = await this.send('Runtime.evaluate', { expression, returnByValue: true });
+  // awaitPromise 时表达式可返回 Promise，请求超时要自己给（默认 60 秒不够长等待用）。
+  async evaluate(expression, { awaitPromise = false, timeoutMs = STEP_TIMEOUT } = {}) {
+    const result = await this.send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise }, timeoutMs);
     if (result.exceptionDetails) {
       const detail = result.exceptionDetails.exception?.description || result.exceptionDetails.text;
       throw new Error(`页面内执行出错：${detail}`);
@@ -211,9 +249,15 @@ function toUrl(target) {
 /**
  * 打开页面、注入 dense-audit.js 并执行，返回 { report, htmlLengthBefore, htmlLengthAfter }。
  * 视口用 Emulation.setDeviceMetricsOverride 设成精确的 width×height。
+ * load 之后先等 waitFor（选择器存在且可见，上限 waitTimeoutMs，默认 60 秒，超时抛错），
+ * 再等 DOM 连续 settle 毫秒（默认 500，0 跳过，最多等 10 秒）没有变化；结果写进 report.context.ready。
+ * waitTimeoutMs 只给测试缩短超时用，命令行不暴露。
  * 失败抛出中文错误；无论成败都会杀掉浏览器进程并删除临时目录。
  */
-export async function runAudit({ target, touch = false, root, width = 1280, height = 720 } = {}) {
+export async function runAudit({
+  target, touch = false, root, width = 1280, height = 720,
+  waitFor, settle = DEFAULT_SETTLE, waitTimeoutMs = STEP_TIMEOUT,
+} = {}) {
   if (!target) throw new Error('缺少要检查的页面：请给 URL 或本地 html 路径');
   const bin = findBrowser();
   if (!bin) throw new Error('未找到 Chromium 内核浏览器：请安装 Edge 或 Chrome，或用 CHROME_PATH 指定可执行文件');
@@ -263,12 +307,26 @@ export async function runAudit({ target, touch = false, root, width = 1280, heig
     }
     await loaded;
 
+    // load 之后 SPA 可能还在异步渲染：先等 waitFor，再等 DOM 静默，审计的才是渲染完的页面。
+    const readyStart = Date.now();
+    const probeArgs = [waitFor || null, settle, waitTimeoutMs, SETTLE_CAP].map((v) => JSON.stringify(v)).join(', ');
+    const probe = await cdp.evaluate(`${READY_PROBE}(${probeArgs})`, {
+      awaitPromise: true,
+      timeoutMs: waitTimeoutMs + SETTLE_CAP + 10_000,
+    });
+    if (probe.waitTimedOut) {
+      throw new Error(`超时（${waitTimeoutMs / 1000} 秒）：等待选择器 ${waitFor} 出现并可见（--wait-for）。请确认选择器正确，且页面确实会渲染出该元素`);
+    }
+    const ready = { waitFor: waitFor || null, settled: probe.settled, waitedMs: Date.now() - readyStart };
+
     const htmlLengthBefore = await cdp.evaluate('document.documentElement.outerHTML.length');
     await cdp.evaluate(scriptSource);
     const options = { touch: touch ? true : undefined, root: root || undefined };
     const json = await cdp.evaluate(`JSON.stringify(denseAudit(${JSON.stringify(options)}))`);
     const htmlLengthAfter = await cdp.evaluate('document.documentElement.outerHTML.length');
-    return { report: JSON.parse(json), htmlLengthBefore, htmlLengthAfter };
+    const report = JSON.parse(json);
+    report.context.ready = ready;
+    return { report, htmlLengthBefore, htmlLengthAfter };
   } finally {
     if (cdp) cdp.close();
     await killBrowser(child);
@@ -288,14 +346,19 @@ function parseArgs(argv) {
     if (a === '--touch') opts.touch = true;
     else if (a === '--root') opts.root = needValue(a, i++);
     else if (a === '--out') opts.out = needValue(a, i++);
-    else if (a === '--width' || a === '--height') {
+    else if (a === '--wait-for') opts.waitFor = needValue(a, i++);
+    else if (a === '--settle') {
+      const n = Number(needValue(a, i++));
+      if (!Number.isInteger(n) || n < 0) throw new Error(`参数 ${a} 需要非负整数（毫秒，0 表示跳过静默等待）`);
+      opts.settle = n;
+    } else if (a === '--width' || a === '--height') {
       const n = Number(needValue(a, i++));
       if (!Number.isInteger(n) || n <= 0) throw new Error(`参数 ${a} 需要正整数`);
       opts[a.slice(2)] = n;
     } else if (a.startsWith('--')) throw new Error(`未知参数：${a}`);
     else rest.push(a);
   }
-  if (rest.length !== 1) throw new Error('用法：node scripts/run-audit.mjs <URL 或本地 html 路径> [--touch] [--root <选择器>] [--width 1280 --height 720] [--out report.json]');
+  if (rest.length !== 1) throw new Error('用法：node scripts/run-audit.mjs <URL 或本地 html 路径> [--touch] [--root <选择器>] [--wait-for <选择器>] [--settle 500] [--width 1280 --height 720] [--out report.json]');
   opts.target = rest[0];
   return opts;
 }
