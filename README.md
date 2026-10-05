@@ -22,6 +22,8 @@ Agent 加载技能后会先问你是否采用这种风格；你已经明确要�
 
 核心工作流适用于 Web、桌面、原生与跨平台前端，按页面任务选择空间体系，分开维护产品事实与视觉约定。验证工具和测量单位按平台选择，浏览器不是前提。
 
+Web 页面可以用随技能附带的 [`scripts/dense-audit.js`](scripts/dense-audit.js) 在浏览器里量取：重复对象视图的行高与一屏可见项数、强调色面积、字号与圆角是否偏离 token 刻度，以及过小字号、卡片嵌套、数字未等宽、触屏热区不足、关键数字被截断、多个主按钮。它零依赖、不要求给项目加标注，结果是需要复核的线索，不是验收结论。用法见 [浏览器内量取脚本](references/audit-script.md)。
+
 设计依据与取舍记录在 [docs/design-rationale.md](https://github.com/qyh9527/dense-compact-ui/blob/main/docs/design-rationale.md)，供维护者修改主题、密度或动效前查看，不进入发布包。
 
 ## 版本

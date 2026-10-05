@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="zh-CN" class="dc-workbench" data-theme="zinc-graphite-dark">
+<head>
+<meta charset="utf-8">
+<title>dense-audit 违规样例</title>
+<link rel="stylesheet" href="../../assets/tokens.css">
+<style>
+/* 故意违反规则的页面，供 tests/browser.test.mjs 验证脚本能在真实浏览器里检出。
+ * 每个区块注明它要触发的规则；不要把它当作写法示范。 */
+html.dc-workbench {
+  background: var(--dc-canvas);
+  color: var(--dc-text);
+}
+body {
+  margin: 0;
+  font: var(--dc-text-body)/var(--dc-line-height) var(--dc-font-sans);
+}
+main {
+  padding: var(--dc-pane-padding);
+}
+button {
+  font: inherit;
+  border: 0;
+  color: var(--dc-text);
+  background: var(--dc-raised);
+}
+
+/* DC007：整幅强调色横幅，占视口约 16%。 */
+.banner {
+  height: 120px;
+  padding: var(--dc-space-5);
+  background: var(--dc-accent);
+  color: #000;
+}
+
+/* DC012 + DC008：两个主按钮、高度只有 30px。 */
+.actions {
+  display: flex;
+  gap: var(--dc-space-4);
+  margin-bottom: var(--dc-space-5);
+}
+button.primary {
+  height: 30px;
+  min-width: 80px;
+  border-radius: var(--dc-radius-control);
+  background: var(--dc-primary-bg);
+  color: var(--dc-primary-fg);
+}
+a.help {
+  display: inline-block;
+  width: 30px;
+  height: 20px;
+  color: var(--dc-accent-ink);
+}
+
+/* DC003：带边框的圆角卡片套卡片。 */
+.card {
+  padding: var(--dc-space-4);
+  border: 1px solid var(--dc-border-strong);
+  border-radius: var(--dc-radius-control);
+  background: var(--dc-surface);
+  margin-bottom: var(--dc-space-5);
+}
+.card .card {
+  margin: var(--dc-space-4) 0 0;
+  background: var(--dc-raised);
+}
+
+/* DC001：11px 的 span；DC013：11px 不在字号刻度上，8px 圆角不在圆角刻度上。 */
+.tiny {
+  font-size: 11px;
+}
+.chip {
+  display: inline-block;
+  padding: var(--dc-space-2) var(--dc-space-4);
+  border-radius: 8px;
+  background: var(--dc-selection);
+}
+
+/* 表格：行高取 token，border-collapse 下含 1px 分隔线。 */
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+td, th {
+  height: var(--dc-row-height);
+  padding: 0 var(--dc-space-3);
+  border-bottom: 1px solid var(--dc-border);
+  text-align: left;
+}
+/* DC001：td 里 11px 的文字。 */
+td.small-cell {
+  font-size: 11px;
+}
+/* DC010：金额被省略号截断。 */
+.clip {
+  width: 40px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* DC005 的 td 没有设置 font-variant-numeric，保持默认。 */
+</style>
+</head>
+<body>
+<div class="banner">强调色横幅</div>
+<main>
+  <div class="actions">
+    <button class="primary" type="button">保存</button>
+    <button class="primary" type="button">提交</button>
+    <a class="help" href="#">帮助</a>
+  </div>
+
+  <section class="card">
+    <span>外层卡片</span>
+    <div class="card">
+      <span>内层卡片</span>
+      <span class="chip">标签</span>
+      <span class="tiny">11px 说明文字</span>
+    </div>
+  </section>
+
+  <table>
+    <thead>
+      <tr><th>名称</th><th>数量</th><th>金额</th><th>备注</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>订单 A</td><td>1024</td><td><div class="clip">1234567890123</div></td><td class="small-cell">备注一</td></tr>
+      <tr><td>订单 B</td><td>2048</td><td>35.50</td><td>备注二</td></tr>
+      <tr><td>订单 C</td><td>512</td><td>7.25</td><td>备注三</td></tr>
+      <tr><td>订单 D</td><td>128</td><td>1,280.00</td><td>备注四</td></tr>
+      <tr><td>订单 E</td><td>64</td><td>96.00</td><td>备注五</td></tr>
+      <tr><td>订单 F</td><td>32</td><td>12.80</td><td>备注六</td></tr>
+    </tbody>
+  </table>
+</main>
+</body>
+</html>
