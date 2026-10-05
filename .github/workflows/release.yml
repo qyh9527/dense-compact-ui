@@ -15,6 +15,7 @@ on:
       - references/**
       - assets/**
       - agents/**
+      - scripts/**
   workflow_dispatch:
     inputs:
       bump:

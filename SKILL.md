@@ -75,6 +75,7 @@ description: 紧凑高信息密度界面的设计、实现与评审指导：高�
 | 改版已有界面、项目已有组件库 | [redesign.md](references/redesign.md) |
 | 审计、设计评审、打磨、精简、边界加固；问题证据、优先级与复验 | [quality-workflow.md](references/quality-workflow.md) |
 | 产品事实与视觉约定分层、页面模式细则、桌面 / 原生 / 跨平台验证 | [context.md](references/context.md) |
+| Web 页面量取：行高、可见项数、强调色面积、刻度偏离与常见违规 | [audit-script.md](references/audit-script.md) |
 | Tailwind、shadcn、Ant Design、Element Plus、MUI 等落地密度与主题（含配置片段） | [stacks.md](references/stacks.md) |
 | 选图标库、图标尺寸、操作对应的图标 | [icons.md](references/icons.md) |
 | 动效：弹出层、展开收起、列表增删、视图切换、拖拽 | [motion.md](references/motion.md) |
@@ -88,7 +89,7 @@ description: 紧凑高信息密度界面的设计、实现与评审指导：高�
 
 ## 5. 交付前检查
 
-用真实内容逐项过 [verify.md](references/verify.md)，按判读里的形态与输入取舍检查项（规则见 verify.md 的「边界场景」）；非 Web 平台按 context.md 选验证工具。有预览时按 quality-workflow.md 的「复验与停止」集中检查、批量修复，停止前做一次观感检查。交付时把检查结果贴在回复里，每项标「预览验证 / 静态检查 / 未验证」；没贴出检查结果，不算完成。最低要求：
+用真实内容逐项过 [verify.md](references/verify.md)，按判读里的形态与输入取舍检查项（规则见 verify.md 的「边界场景」）；非 Web 平台按 context.md 选验证工具。Web 页面能在浏览器里打开时，用 [audit-script.md](references/audit-script.md) 的脚本采集行高、可见项数与刻度偏离等数字。有预览时按 quality-workflow.md 的「复验与停止」集中检查、批量修复，停止前做一次观感检查。交付时把检查结果贴在回复里，每项标「预览验证 / 静态检查 / 未验证」；没贴出检查结果，不算完成。最低要求：
 
 - [ ] 长内容、200% 文字缩放、矮视口时核心任务都能完成；形态含手机时再查窄到 360px 和软键盘弹出，只用于桌面窗口时查小窗口（如 1280×720）
 - [ ] 重复对象视图量过折叠态行高、一屏可辨认的项数和内容区宽度利用（见 verify.md 的「评价方式」）

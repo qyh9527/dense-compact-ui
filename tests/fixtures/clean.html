@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="zh-CN" class="dc-workbench" data-theme="zinc-graphite-dark">
+<head>
+<meta charset="utf-8">
+<title>dense-audit 干净样例</title>
+<link rel="stylesheet" href="../../assets/tokens.css">
+<style>
+/* 按 token 正确实现的小表格工作台，应当零告警。
+ * 测试以 touch:true 运行而 headless 下 pointer 不是 coarse，
+ * 所以可交互元素直接保证 44px，不依赖 --dc-hit-size。 */
+html.dc-workbench {
+  background: var(--dc-canvas);
+  color: var(--dc-text);
+}
+body {
+  margin: 0;
+  font: var(--dc-text-body)/var(--dc-line-height) var(--dc-font-sans);
+}
+main {
+  padding: var(--dc-pane-padding);
+}
+h1 {
+  margin: 0;
+  font-size: var(--dc-text-title);
+  font-weight: 600;
+}
+.bar {
+  display: flex;
+  align-items: center;
+  gap: var(--dc-space-4);
+  margin-bottom: var(--dc-space-4);
+}
+.bar h1 {
+  flex: 1;
+}
+.dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--dc-radius-full);
+  background: var(--dc-success);
+}
+.meta {
+  font-size: var(--dc-text-small);
+  color: var(--dc-text-muted);
+}
+input, button {
+  box-sizing: border-box;
+  height: 44px;
+  min-width: 44px;
+  font: inherit;
+  color: var(--dc-text);
+  border: 1px solid var(--dc-border-control);
+  border-radius: var(--dc-radius-control);
+  background: transparent;
+}
+input {
+  width: 200px;
+  padding: 0 var(--dc-space-4);
+}
+button {
+  padding: 0 var(--dc-space-5);
+}
+button.primary {
+  border-color: transparent;
+  background: var(--dc-primary-bg);
+  color: var(--dc-primary-fg);
+}
+a.nav {
+  display: inline-flex;
+  align-items: center;
+  min-width: 44px;
+  min-height: 44px;
+  color: var(--dc-accent-ink);
+}
+.pane {
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius-pane);
+  background: var(--dc-surface);
+}
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+td, th {
+  height: var(--dc-row-height);
+  padding: 0 var(--dc-space-3);
+  border-bottom: 1px solid var(--dc-border);
+  text-align: left;
+  font-variant-numeric: tabular-nums;
+}
+tbody tr:last-child td {
+  border-bottom: 0;
+}
+</style>
+</head>
+<body>
+<main>
+  <div class="bar">
+    <h1>订单</h1>
+    <span class="dot"></span>
+    <span class="meta">已同步</span>
+    <a class="nav" href="#">帮助</a>
+    <input type="text" aria-label="搜索订单" placeholder="搜索">
+    <button type="button">导出</button>
+    <button class="primary" type="button">新建</button>
+  </div>
+
+  <section class="pane">
+    <table>
+      <thead>
+        <tr><th>名称</th><th>数量</th><th>金额</th><th>耗时</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>订单 A</td><td>1024</td><td>35.50</td><td>120ms</td></tr>
+        <tr><td>订单 B</td><td>2048</td><td>7.25</td><td>85ms</td></tr>
+        <tr><td>订单 C</td><td>512</td><td>1,280.00</td><td>9ms</td></tr>
+        <tr><td>订单 D</td><td>128</td><td>96.00</td><td>42ms</td></tr>
+        <tr><td>订单 E</td><td>64</td><td>12.80</td><td>310ms</td></tr>
+        <tr><td>订单 F</td><td>32</td><td>5.00</td><td>17ms</td></tr>
+      </tbody>
+    </table>
+  </section>
+</main>
+</body>
+</html>

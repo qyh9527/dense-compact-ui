@@ -1,0 +1,31 @@
+name: check
+
+on:
+  pull_request:
+    paths:
+      - scripts/**
+      - tests/**
+      - assets/tokens.css
+      - .github/workflows/check.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/**
+      - tests/**
+      - assets/tokens.css
+      - .github/workflows/check.yml
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      CHROME_PATH: /usr/bin/google-chrome
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node --test "tests/*.test.mjs"
