@@ -4,6 +4,8 @@
 
 | 资料 | 吸收了什么 |
 | --- | --- |
+| [Impeccable：技能入口](https://github.com/pbakaus/impeccable/blob/489855d98d4502bc2f46af77d4de37e7ef650e10/skill/SKILL.src.md)、[audit](https://github.com/pbakaus/impeccable/blob/489855d98d4502bc2f46af77d4de37e7ef650e10/skill/reference/audit.md)、[polish](https://github.com/pbakaus/impeccable/blob/489855d98d4502bc2f46af77d4de37e7ef650e10/skill/reference/polish.md)、[distill](https://github.com/pbakaus/impeccable/blob/489855d98d4502bc2f46af77d4de37e7ef650e10/skill/reference/distill.md)、[harden](https://github.com/pbakaus/impeccable/blob/489855d98d4502bc2f46af77d4de37e7ef650e10/skill/reference/harden.md) | 将实现审计、设计评审和定向修复分开；按任务影响排序；打磨保持既有系统；检测结果需在场景中核对；覆盖失败与极端内容；集中检查、修正和确认。按工作台约束整理为 quality-workflow.md 与 impeccable.md |
+| [mattpocock/skills：writing-for-agents](https://github.com/mattpocock/skills/blob/4588b32ecab9ecc9fc8cc6b6c5e7d675b6004b0d/skills/productivity/writing-for-agents/SKILL.md) | 入口明确写出参考文件的触发分支；步骤有可核对的完成条件；分支细则按需披露；复用现有规则而不重复维护 |
 | [TokenTracker DESIGN.md](https://github.com/xiufengsun/TokenTracker/blob/main/DESIGN.md) | 数字 `tabular-nums` 与等宽用途、固定字阶与限宽大指标、强调色 ≤10% 配额、图表分类色分离、不用纯黑白、带色相中性色、不嵌套卡片、Tab 单行横滑、表格窄屏收列、按压反馈、一页 DESIGN.md 的写法 |
 | [Material 3：Density](https://m3.material.io/foundations/layout/grids-spacing/density) / [Material 2：Applying density](https://m2.material.io/design/layout/applying-density.html) | 聚焦型任务不压密度；密度由用户选择、不随断点自动变；切换入口用标准热区；密组件配松网格 |
 | [Carbon：Data table](https://www.carbondesignsystem.com/building-blocks/core/components/data-table/guidelines) / [Spacing](https://www.carbondesignsystem.com/building-blocks/foundations/spacing/overview) | 表头与数据行同高、工具栏与行高配套；局部可以密，整页要留让视线休息的留白 |
@@ -38,6 +40,8 @@
 | [W3C：Media Queries Level 5](https://drafts.csswg.org/mediaqueries-5/#prefers-color-scheme) / [Mozilla bug 1643656](https://bugzilla.mozilla.org/show_bug.cgi?id=1643656) | `prefers-color-scheme` 只剩 `light` / `dark`，`no-preference` 已删除，系统无偏好时报告 `light`，所以「跟随系统」不能兼当默认深色 |
 
 ui-ux-pro-max 的图表库（charts 数据）和图标库、taste-skill 的图标规则，按工作台场景改写为 charts.md、icons.md；它们的 GSAP 动效预设与 taste-skill 的液态玻璃不吸收，工作台动效只保留说明状态变化的做法（motion.md）。
+
+Impeccable 的取舍：吸收工作方式，以本项目术语独立编写规则，未复制其脚本、检测器或提示词正文，也不引入运行依赖。通用的增加留白、折叠次要内容、字体与动效建议必须先满足本项目的空间预算、总览与可达性要求；不照搬主观总分、强制初始化或多套视觉方案流程。能力名称仅供映射，执行入口以用户实际安装的版本为准。上表固定本次参考提交，避免上游目录变化后失去依据。
 
 取舍说明：TokenTracker 的触屏热区是 ≥40px，本技能保留 44×44px 设计目标；其 150–250ms 动效时长与本技能 80–180ms 不同，紧凑界面取更短的反馈。
 

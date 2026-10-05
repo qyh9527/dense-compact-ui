@@ -7,6 +7,8 @@ description: 紧凑高信息密度界面的设计、实现与评审指导：高�
 
 本文件是入口和索引：每次都做「确认 → 判读 → 按索引读参考 → 检查并贴出结果」；细则都在 references/，只读当前任务用得到的文件。
 
+审计、评审、打磨、精简或加固已有界面时，先读 [quality-workflow.md](references/quality-workflow.md) 选择路径与完成条件；只要求审计或评审时只报告，要求修复时再改文件。
+
 ## 1. 先确认是否采用
 
 本技能会被宽泛的前端 / UI / UX 关键词加载，加载不等于用户要这种风格。
@@ -67,6 +69,8 @@ description: 紧凑高信息密度界面的设计、实现与评审指导：高�
 | 树形导航、文件管理、拖放 | [tree.md](references/tree.md) |
 | 设置页：分组、搜索、保存方式、恢复默认 | [settings.md](references/settings.md) |
 | 改版已有界面、项目已有组件库 | [redesign.md](references/redesign.md) |
+| 审计、设计评审、打磨、精简、边界加固；问题证据、优先级与复验 | [quality-workflow.md](references/quality-workflow.md) |
+| 与 Impeccable 配合、处理其检测告警或设计建议冲突 | [impeccable.md](references/impeccable.md) |
 | Tailwind、shadcn、Ant Design、Element Plus、MUI 等落地密度与主题（含配置片段） | [stacks.md](references/stacks.md) |
 | 选图标库、图标尺寸、操作对应的图标 | [icons.md](references/icons.md) |
 | 动效：弹出层、展开收起、列表增删、视图切换、拖拽 | [motion.md](references/motion.md) |
@@ -91,4 +95,4 @@ description: 紧凑高信息密度界面的设计、实现与评审指导：高�
 
 ## 6. 交付
 
-按任务交付界面、实现、设计规格或评审结论，用当前产品的名称和内容。简述关键空间决策、圆角体系、窄屏行为、主题和验证结果。评审时问题按影响排序：可达性 > 触控与交互 > 性能 > 布局与响应式 > 字体与色彩 > 动效与装饰。
+按任务交付界面、实现、设计规格或评审结论，用当前产品的名称和内容。简述关键空间决策、圆角体系、窄屏行为、主题和验证结果。评审先按实际影响分级，同级按可达性 > 触控与交互 > 性能 > 布局与响应式 > 字体与色彩 > 动效与装饰排序。

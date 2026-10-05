@@ -10,6 +10,12 @@ Agent 加载技能后会先问你是否采用这种风格；你已经明确要�
 
 把本仓库作为一个技能目录放进 Claude Code / Codex 的 skills 目录（仓库根即技能根，入口为 `SKILL.md`），或在 [cc-switch](https://github.com/farion1231/cc-switch) 中以 `qyh9527/dense-compact-ui` 添加。
 
+## 审计与改进
+
+可以直接说「只评审这个工作台」「打磨筛选栏」「精简重复包装，但保留比较列」或「补齐失败恢复」。Agent 会按任务选择检查路径，给出带位置、证据、影响和复验方法的问题；仅评审时不改文件，明确要求修复时继续实施。详见 [审计与定向改进](references/quality-workflow.md)。
+
+[Impeccable](https://github.com/pbakaus/impeccable) 可补充实现审计、设计评审、文案与边界检查。本技能保留紧凑空间语言，按项目约定处理通用建议与检测告警；无需安装 Impeccable 也能使用。详见 [配合方式与取舍](references/impeccable.md)。
+
 ## 版本
 
 技能文件推到 `main` 后由 GitHub Actions 自动发 release，附打包好的技能 zip。默认升 patch 版本；提交标题里写 `[minor]` 或 `[major]` 升对应级别，写 `[skip release]` 则这次不发。
