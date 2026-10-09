@@ -5,20 +5,21 @@
 // 用法：
 //   node scripts/run-audit.mjs <URL 或本地 html 路径> [--touch] [--root <选择器>]
 //                              [--wait-for <选择器>] [--settle 500]
-//                              [--width 1280 --height 720] [--out report.json]
+//                              [--width 1280 --height 720] [--screenshot <目录>] [--out report.json]
 //   多视口：用可重复的 --viewport 宽x高 代替 --width / --height，同一个浏览器里逐个视口重载并审计，
 //   输出 { schema: 'dense-audit-multi-v1', totalFindings, reports: [每个视口一份 dense-audit-v1] }。
 // --steps steps.json：加载后按步骤文件依次 click / fill / press / hover / select / wait / expect，
 //   在 { "audit": "状态名" } 处量取（没写就在最后量一次）；某一步做不了或期望没达成记 DC023 并停下，
 //   在失败处再量一次。输出同多视口格式，context.state 标明状态。
 // --scroll：量取后把文档和主要滚动容器各滚到顶、滚到底，内容被固定栏永久盖住的报 DC022，最后恢复滚动位置。
+// --screenshot <目录>：每份报告量取前截一张当前视口的 PNG 存进该目录，文件名带序号、视口、配色、状态，路径写在 context.screenshot。
 // --color-scheme light,dark：按系统深浅色偏好（prefers-color-scheme）各加载一次；给了两种时互相比较，
 //   颜色写死没跟主题变的报 DC021，记在出问题的那种配色的报告里。输出同多视口格式。
 // --wait-for：load 之后等该选择器存在且可见（上限 60 秒，超时按出错处理）。
 // --settle：再等 DOM 连续这么多毫秒没有变化（默认 500，最多等 10 秒；0 跳过）。
 // 退出码：0 没有告警；1 有告警；2 浏览器、导航或脚本出错（原因写到 stderr）。
 //
-// 也导出 runAudit / runAudits / checkSteps / findBrowser，供 tests/browser.test.mjs 复用同一套 CDP 逻辑。
+// 也导出 runAudit / runAudits / checkSteps / screenshotName / findBrowser，供 tests/browser.test.mjs 复用同一套 CDP 逻辑。
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -294,6 +295,7 @@ function toUrl(target) {
  * 视口用 Emulation.setDeviceMetricsOverride 设成精确的 width×height。
  * load 之后先等 waitFor（选择器存在且可见，上限 waitTimeoutMs，默认 60 秒，超时抛错），
  * 再等 DOM 连续 settle 毫秒（默认 500，0 跳过，最多等 10 秒）没有变化；结果写进 report.context.ready。
+ * screenshot 给目录时，每份报告量取前截一张当前视口的 PNG 存进去，路径写进 report.context.screenshot。
  * waitTimeoutMs 只给测试缩短超时用，命令行不暴露。
  * 失败抛出中文错误；无论成败都会杀掉浏览器进程并删除临时目录。
  */
@@ -534,6 +536,23 @@ function loadThemeDiff(source) {
   return (a, b, ctx) => JSON.parse(JSON.stringify(sandbox.denseAuditThemeDiff(a, b, ctx)));
 }
 
+// --screenshot 的文件名：序号-视口[-配色][-状态].png，序号与报告顺序一致；状态名里文件名不能用的字符换成 _，
+// 再按 UTF-8 截到 120 字节（约 40 个汉字或 30 个 emoji），整个文件名远低于常见文件系统单段 255 字节的上限。
+export function screenshotName(index, { width, height }, scheme, state) {
+  const parts = [String(index).padStart(2, '0'), `${width}x${height}`];
+  if (scheme) parts.push(scheme);
+  let label = '';
+  let bytes = 0;
+  for (const ch of String(state || '').replace(/[<>:"/\x5c|?*\u0000-\u001f]/g, '_').replace(/\s+/g, ' ')) {
+    bytes += Buffer.byteLength(ch);
+    if (bytes > 120) break;
+    label += ch;
+  }
+  label = label.trim();
+  if (label) parts.push(label);
+  return `${parts.join('-')}.png`;
+}
+
 /**
  * 同一个浏览器里按 viewports 顺序逐个视口审计：每个视口先切尺寸，再重新加载页面并等就绪，
  * 量到的是在该尺寸下首次布局的结果。返回 { runs: [{ report, htmlLengthBefore, htmlLengthAfter }] }。
@@ -542,10 +561,11 @@ function loadThemeDiff(source) {
  * scroll：量取后检查滚到顶 / 底时被固定栏永久盖住的内容（DC022）；DC016 已报的元素不重复报。
  * colorSchemes（如 ['light', 'dark']）：每个视口按每种 prefers-color-scheme 各加载一次，runs 按视口、配色顺序排列；
  * 给了两种以上时两两比较颜色快照，DC021 记在出问题的那种配色的报告里。
+ * screenshot：截图目录，文件名见 screenshotName，序号按 runs 的顺序。
  * 其余参数与 runAudit 相同。
  */
 export async function runAudits({
-  target, touch = false, root, viewports, colorSchemes, scroll = false, steps,
+  target, touch = false, root, viewports, colorSchemes, scroll = false, steps, screenshot,
   waitFor, settle = DEFAULT_SETTLE, waitTimeoutMs = STEP_TIMEOUT,
 } = {}) {
   if (!target) throw new Error('缺少要检查的页面：请给 URL 或本地 html 路径');
@@ -554,6 +574,14 @@ export async function runAudits({
   const bin = findBrowser();
   if (!bin) throw new Error('未找到 Chromium 内核浏览器：请安装 Edge 或 Chrome，或用 CHROME_PATH 指定可执行文件');
   const url = toUrl(target);
+  // 截图目录先建好：路径不能用时在启动浏览器前就报错。
+  if (screenshot) {
+    try {
+      fs.mkdirSync(screenshot, { recursive: true });
+    } catch (err) {
+      throw new Error(`截图目录建不了：${screenshot}（${err.message}）`);
+    }
+  }
   const scriptSource = fs.readFileSync(SCRIPT_PATH, 'utf8');
   const schemes = colorSchemes && colorSchemes.length ? colorSchemes : [null];
   const themeDiff = schemes.length > 1 ? loadThemeDiff(scriptSource) : null;
@@ -589,6 +617,7 @@ export async function runAudits({
 
     const runs = [];
     let loads = 0;
+    let shots = 0;
     for (const { width, height } of viewports) {
       await cdp.send('Emulation.setDeviceMetricsOverride', {
         width, height, deviceScaleFactor: 1, mobile: false,
@@ -634,6 +663,12 @@ export async function runAudits({
 
         // 在当前页面状态量取一次；state 与 stepsDone 只在跑步骤时写进报告。
         const auditHere = async (state, stepsDone) => {
+          // 截图在量取之前，截到的就是这份报告量的画面。
+          const shot = screenshot ? path.resolve(screenshot, screenshotName(++shots, { width, height }, scheme, state)) : null;
+          if (shot) {
+            const { data } = await cdp.send('Page.captureScreenshot', { format: 'png' });
+            fs.writeFileSync(shot, Buffer.from(data, 'base64'));
+          }
           const htmlLengthBefore = await cdp.evaluate('document.documentElement.outerHTML.length');
           await cdp.evaluate(scriptSource);
           const options = { touch: touch ? true : undefined, root: root || undefined };
@@ -647,6 +682,7 @@ export async function runAudits({
           }
           const htmlLengthAfter = await cdp.evaluate('document.documentElement.outerHTML.length');
           report.context.ready = ready;
+          if (shot) report.context.screenshot = shot;
           if (scheme) report.context.colorScheme = scheme;
           if (steps) {
             report.context.state = state;
@@ -783,6 +819,7 @@ function parseArgs(argv) {
     }
     else if (a === '--root') opts.root = needValue(a, i++);
     else if (a === '--out') opts.out = needValue(a, i++);
+    else if (a === '--screenshot') opts.screenshot = needValue(a, i++);
     else if (a === '--wait-for') opts.waitFor = needValue(a, i++);
     else if (a === '--viewport') viewports.push(parseViewport(needValue(a, i++)));
     else if (a === '--color-scheme') {
@@ -802,7 +839,7 @@ function parseArgs(argv) {
     } else if (a.startsWith('--')) throw new Error(`未知参数：${a}`);
     else rest.push(a);
   }
-  if (rest.length !== 1) throw new Error('用法：node scripts/run-audit.mjs <URL 或本地 html 路径> [--touch] [--root <选择器>] [--wait-for <选择器>] [--settle 500] [--scroll] [--steps steps.json] [--width 1280 --height 720 | --viewport 1280x720 --viewport 390x844 …] [--color-scheme light,dark] [--out report.json]');
+  if (rest.length !== 1) throw new Error('用法：node scripts/run-audit.mjs <URL 或本地 html 路径> [--touch] [--root <选择器>] [--wait-for <选择器>] [--settle 500] [--scroll] [--steps steps.json] [--width 1280 --height 720 | --viewport 1280x720 --viewport 390x844 …] [--color-scheme light,dark] [--screenshot <目录>] [--out report.json]');
   if (viewports.length && (opts.width || opts.height)) throw new Error('--viewport 不能和 --width / --height 同时使用');
   if (viewports.length) opts.viewports = viewports;
   if (schemes.length) opts.colorSchemes = schemes;
