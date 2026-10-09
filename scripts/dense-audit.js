@@ -498,7 +498,7 @@
       return Math.max(0, round1(Math.max(outlineExtent, shadowExtent)));
     }
 
-    /* 写了只对 flex / grid（gap 还有多列）生效的属性，但 display 不是它们。只记非默认值；
+    /* 写了只对 flex / grid（gap 与 justify-content 还有多列）生效的属性，但 display 不是它们。只记非默认值；
      * 按钮等控件的 UA 默认 align-items: flex-start 属于默认值，不记。 */
     function deadLayoutOf(cs) {
       var d = cs.display;
@@ -513,7 +513,8 @@
         if (colGap) props.push('column-gap: ' + cs.columnGap);
       }
       if (['normal', 'stretch', 'start', 'flex-start'].indexOf(cs.alignItems) < 0) props.push('align-items: ' + cs.alignItems);
-      if (['normal', 'start', 'flex-start'].indexOf(cs.justifyContent) < 0) props.push('justify-content: ' + cs.justifyContent);
+      /* 多列布局里 justify-content 分配列盒，同样有效。 */
+      if (!multicol && ['normal', 'start', 'flex-start'].indexOf(cs.justifyContent) < 0) props.push('justify-content: ' + cs.justifyContent);
       if (cs.flexDirection && cs.flexDirection !== 'row') props.push('flex-direction: ' + cs.flexDirection);
       if (cs.flexWrap && cs.flexWrap !== 'nowrap') props.push('flex-wrap: ' + cs.flexWrap);
       if (cs.gridTemplateColumns && cs.gridTemplateColumns !== 'none') props.push('grid-template-columns: ' + cs.gridTemplateColumns);
