@@ -75,7 +75,7 @@ description: 紧凑高信息密度界面的设计、实现与评审指导：高�
 | 改版已有界面、项目已有组件库 | [redesign.md](references/redesign.md) |
 | 审计、设计评审、打磨、精简、边界加固；快检 / 完整验收路由、验收契约、证据等级、问题优先级与复验 | [quality-workflow.md](references/quality-workflow.md) |
 | 产品事实与视觉约定分层、页面模式细则、桌面 / 原生 / 跨平台验证 | [context.md](references/context.md) |
-| Web 页面量取：行高、可见项数、强调色面积、刻度偏离、横向溢出、焦点环裁切、点击遮挡、字体与图标字体回退、破图、布局属性没生效，多视口一次跑 | [audit-script.md](references/audit-script.md) |
+| Web 页面量取：行高、可见项数、强调色面积、刻度偏离、横向溢出、焦点环裁切、点击遮挡、字体与图标字体回退、破图、布局属性没生效、深浅主题残色，多视口与深浅配色一次跑 | [audit-script.md](references/audit-script.md) |
 | Tailwind、shadcn、Ant Design、Element Plus、MUI 等落地密度与主题（含配置片段） | [stacks.md](references/stacks.md) |
 | 选图标库、图标尺寸、操作对应的图标 | [icons.md](references/icons.md) |
 | 动效：弹出层、展开收起、列表增删、视图切换、拖拽 | [motion.md](references/motion.md) |

@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>主题残色好例</title>
+<style>
+/* 与 theme-bad.html 对应的合法写法：颜色都走主题变量；品牌色按钮两种配色下相同；
+ * 有意固定深色的代码块用 data-dc-ignore 写明理由。DC021 都不应告警。 */
+:root {
+  color-scheme: light dark;
+  --bg: #ffffff;
+  --text: #1f2328;
+  --muted: #59636e;
+  --surface: #f6f8fa;
+  --border: #d0d7de;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #191a1b;
+    --text: #e6e6e6;
+    --muted: #a0a1a7;
+    --surface: #222326;
+    --border: #3a3b3f;
+  }
+}
+body {
+  margin: 0;
+  padding: 12px;
+  background: var(--bg);
+  color: var(--text);
+  font: 13px/1.5 system-ui, sans-serif;
+}
+section {
+  margin-top: 12px;
+}
+.panel {
+  height: 160px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+.muted {
+  color: var(--muted);
+}
+.brand {
+  height: 28px;
+  padding: 0 12px;
+  border: 0;
+  color: #ffffff;
+  background: #1f6feb;
+  font: inherit;
+}
+pre {
+  margin: 12px 0 0;
+  padding: 12px;
+  color: #e6edf3;
+  background: #0d1117;
+  font: 13px/1.5 ui-monospace, monospace;
+}
+</style>
+</head>
+<body>
+<h1>主题残色</h1>
+<section class="panel"><p>跟随主题的说明面板</p><p class="muted">次要说明文字</p></section>
+<section><button class="brand" type="button">品牌色按钮</button></section>
+<pre data-dc-ignore="DC021" data-dc-ignore-reason="代码块有意固定深色">const theme = 'fixed';</pre>
+</body>
+</html>
