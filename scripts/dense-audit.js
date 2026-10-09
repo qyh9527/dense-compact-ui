@@ -7,7 +7,10 @@
  * 结构：
  *   readTokens(win, doc)       读 --dc-* token，读不到就回落到默认值
  *   collect(win, doc, opts)    只读 DOM，产出 records（纯数据，不含页面正文文本）
+ *   collectPage(win, doc)      页面级数据：文档滚动宽度、加载失败的字体族
  *   evaluate(records, ctx)     纯函数：records + ctx -> 报告，可在 Node 里单测
+ *
+ * 字体状态要等 document.fonts.ready 之后才准；run-audit.mjs 会先等，手动注入时先 await 它。
  *
  * 顶层只定义函数，不访问 window / document；只有调用 denseAudit 时才读页面。
  */
@@ -73,6 +76,15 @@
   };
   /* 内联链接例外（WCAG 2.5.8 inline）所在的文本段落。 */
   var PARAGRAPH_TAGS = { p: 1, li: 1, dd: 1, dt: 1, blockquote: 1, figcaption: 1 };
+  /* 合法盖住页面的浮层（DC016）：命中点落在这些元素里不算拦截。 */
+  var OVERLAY_SELECTOR = [
+    'dialog[open]', '[role=dialog]', '[role=alertdialog]', '[role=menu]', '[role=listbox]',
+    '[aria-modal="true"]', '[popover]'
+  ].join(',');
+  /* 没有匹配到任何 :focus / :focus-visible 规则时，按浏览器默认焦点环向外约 2px 估算（DC015）。 */
+  var DEFAULT_RING = 2;
+  /* 页面滚动由视口承担，html / body 的 overflow 会传给视口，不算裁切容器。 */
+  var VIEWPORT_TAGS = { html: 1, body: 1 };
 
   /* ------------------------------------------------------------------ */
   /* 通用小工具                                                          */
@@ -140,6 +152,12 @@
     var n = a.length;
     if (!n) return 0;
     return n % 2 ? a[(n - 1) / 2] : (a[n / 2 - 1] + a[n / 2]) / 2;
+  }
+
+  /* 字体族名规范化：去引号、去首尾空白、转小写。传入 font-family 列表时只取第一项。 */
+  function firstFamily(str) {
+    var first = String(str || '').split(',')[0] || '';
+    return first.trim().replace(/^["']|["']$/g, '').trim().toLowerCase() || null;
   }
 
   /* ------------------------------------------------------------------ */
@@ -306,7 +324,13 @@
    *   form     表单控件；inter 可交互；disabled 已禁用
    *   inlinePara  位于文本段落内的内联链接
    *   trunc    text-overflow: ellipsis 且内容确实被截断
-   *   inCell   自身或祖先是单元格（td、th、role=gridcell|cell），向上只找到最近的 table、grid、treegrid 为止 */
+   *   inCell   自身或祖先是单元格（td、th、role=gridcell|cell），向上只找到最近的 table、grid、treegrid 为止
+ *   clipX / clipY   该方向 overflow 不是 visible（会裁切或滚动后代）
+ *   clip     clipX / clipY 且可见时的内框（padding box，不含滚动条）{x, y, width, height}
+ *   ring     可交互且未禁用：焦点环向外伸出的估算 px（≤0 记 0，表示内描边或没有焦点环）
+ *   hitBy    可交互且未禁用：中心点被别的元素盖住时，盖住它的元素的选择器；否则 null
+ *   noPointer  可交互且未禁用，但 computed pointer-events 为 none（点击会穿透）
+ *   ff       带文字时 computed font-family 的第一项（规范化后） */
   function collect(win, doc, opts) {
     opts = opts || {};
     var rootEl = opts.root ? doc.querySelector(opts.root) : doc.documentElement;
@@ -359,6 +383,120 @@
     function parsePx(value) {
       var n = parseFloat(value);
       return isNaN(n) ? 0 : n;
+    }
+
+    function pathOf(el) {
+      var parts = [];
+      for (var n = el, depth = 0; n && n.nodeType === 1 && depth < 4; n = n.parentElement, depth++) {
+        var seg = segOf(n);
+        parts.unshift(seg);
+        if (seg.charAt(0) === '#') break;
+      }
+      return parts.join(' > ');
+    }
+
+    /* 收集样式表里的 :focus / :focus-visible 规则（跨域样式表读不到时跳过），只读一次。
+     * 去掉伪类后的选择器用来匹配元素；:not(:focus…) 与 :focus-within 不是元素自己的焦点态，跳过。
+     * 不算优先级，按样式表顺序后者覆盖前者，是近似值。 */
+    var focusRules = null;
+    function getFocusRules() {
+      if (focusRules) return focusRules;
+      focusRules = [];
+      function walk(list) {
+        for (var i = 0; i < list.length; i++) {
+          var rule = list[i];
+          if (rule.selectorText) {
+            if (!/:focus/.test(rule.selectorText)) continue;
+            rule.selectorText.split(',').forEach(function (part) {
+              if (/:not\([^)]*:focus|:focus-within/.test(part) || !/:focus/.test(part)) return;
+              var base = part.replace(/:focus(-visible)?/g, '').trim();
+              if (!base || /[>+~]$/.test(base)) base += '*';
+              focusRules.push({ sel: base, style: rule.style });
+            });
+          } else if (rule.cssRules) {
+            if (rule.media && rule.media.mediaText && win.matchMedia && !win.matchMedia(rule.media.mediaText).matches) continue;
+            walk(rule.cssRules);
+          }
+        }
+      }
+      var sheets = doc.styleSheets || [];
+      for (var s = 0; s < sheets.length; s++) {
+        try { walk(sheets[s].cssRules); } catch (e) { /* 跨域样式表 */ }
+      }
+      return focusRules;
+    }
+
+    /* 焦点环向外伸出多少 px：合并匹配到的焦点规则里的 outline / box-shadow，var() 按元素当前的 computed 值展开。 */
+    function focusRingOf(el, cs) {
+      var props = {};
+      var matched = false;
+      getFocusRules().forEach(function (fr) {
+        var ok = false;
+        try { ok = el.matches(fr.sel); } catch (e) { ok = false; }
+        if (!ok) return;
+        matched = true;
+        ['outline', 'outline-width', 'outline-style', 'outline-offset', 'box-shadow'].forEach(function (name) {
+          var v = fr.style.getPropertyValue(name);
+          if (v) props[name] = v;
+        });
+      });
+      if (!matched) return DEFAULT_RING;
+
+      function resolve(v) {
+        return String(v || '').replace(/var\(\s*(--[\w-]+)\s*(?:,\s*([^)]*))?\)/g, function (_, name, fallback) {
+          return cs.getPropertyValue(name).trim() || (fallback || '').trim();
+        });
+      }
+      function lengthOf(token) {
+        if (token === 'thin') return 1;
+        if (token === 'medium') return 3;
+        if (token === 'thick') return 5;
+        var m = /^(-?[\d.]+)px$/.exec(token);
+        return m ? parseFloat(m[1]) : null;
+      }
+
+      var outlineExtent;
+      var shorthand = resolve(props.outline).trim();
+      var style = resolve(props['outline-style']).trim();
+      var widthRaw = resolve(props['outline-width']).trim();
+      if (!shorthand && !style && !widthRaw && !props['outline-offset']) {
+        /* 焦点规则没碰 outline：浏览器默认焦点环仍在。 */
+        outlineExtent = DEFAULT_RING;
+      } else {
+        var tokens = shorthand ? shorthand.split(/\s+/) : [];
+        var none = style === 'none' || shorthand === '0' || tokens.indexOf('none') >= 0;
+        var width = lengthOf(widthRaw);
+        if (width === null) {
+          for (var t = 0; t < tokens.length && width === null; t++) width = lengthOf(tokens[t]);
+        }
+        if (width === null) width = shorthand || style ? 3 : DEFAULT_RING;
+        var offset = lengthOf(resolve(props['outline-offset']).trim()) || 0;
+        outlineExtent = none ? 0 : width + offset;
+      }
+
+      var shadowExtent = 0;
+      var shadow = resolve(props['box-shadow']).trim();
+      if (shadow && shadow !== 'none' && !/inset/.test(shadow)) {
+        (shadow.match(/-?[\d.]+px/g) || []).forEach(function (n) {
+          shadowExtent = Math.max(shadowExtent, parseFloat(n));
+        });
+      }
+      return Math.max(0, round1(Math.max(outlineExtent, shadowExtent)));
+    }
+
+    /* 中心点命中测试：命中自己、后代或关联的 label 都算可点；命中祖先说明中心已被滚动容器裁到外面，不判。
+     * 浮层只豁免它盖住的浮层外控件；浮层里的控件被浮层内另一层盖住照常报。 */
+    function hitTest(el, rect) {
+      var cx = rect.x + rect.width / 2;
+      var cy = rect.y + rect.height / 2;
+      if (cx < 0 || cy < 0 || cx >= win.innerWidth || cy >= win.innerHeight) return null;
+      var h = doc.elementFromPoint(cx, cy);
+      if (!h || h === el || el.contains(h) || h.contains(el)) return null;
+      if (h.localName === 'label' && h.control === el) return null;
+      if (el.closest('[inert],[aria-hidden="true"]')) return null;
+      var overlay = h.closest(OVERLAY_SELECTOR);
+      if (overlay && !overlay.contains(el)) return null;
+      return pathOf(h);
     }
 
     function directTextInfo(el) {
@@ -437,13 +575,28 @@
         disabled: false,
         inlinePara: false,
         trunc: false,
-        inCell: inCellOf(el, tag, role, parentIdx)
+        inCell: inCellOf(el, tag, role, parentIdx),
+        clipX: cs.overflowX !== 'visible',
+        clipY: cs.overflowY !== 'visible',
+        clip: null,
+        ring: 0,
+        hitBy: null,
+        noPointer: false,
+        ff: hasText ? firstFamily(cs.fontFamily) : null
       };
 
       var bg = normalize(cs.backgroundColor);
       if (bg && bg.a >= 0.999) rec.bg = bg.rgb;
 
       if (vis) {
+        if (rec.clipX || rec.clipY) {
+          rec.clip = {
+            x: round1(rect.x + el.clientLeft),
+            y: round1(rect.y + el.clientTop),
+            width: el.clientWidth,
+            height: el.clientHeight
+          };
+        }
         /* 圆角取左上角，百分比按元素宽度换算。 */
         var rm = /^(-?[\d.]+)(px|%)/.exec(cs.borderTopLeftRadius || '');
         if (rm) rec.radius = rm[2] === '%' ? parseFloat(rm[1]) * rect.width / 100 : parseFloat(rm[1]);
@@ -458,6 +611,12 @@
           var par = el.parentElement;
           if (tag === 'a' && cs.display === 'inline' && par && PARAGRAPH_TAGS[par.localName]) {
             rec.inlinePara = directTextInfo(par).any;
+          }
+          if (!rec.disabled && !outside) {
+            rec.ring = focusRingOf(el, cs);
+            /* 看起来可用却带 pointer-events: none（含继承）：点击会穿透，同样算点不到。 */
+            if (cs.pointerEvents === 'none') rec.noPointer = !el.closest('[inert],[aria-hidden="true"]');
+            else rec.hitBy = hitTest(el, rect);
           }
         }
 
@@ -497,6 +656,33 @@
     return records;
   }
 
+  /* 页面级数据：文档能否横向滚动（DC014），以及加载失败的字体族（DC017）。
+   * 同一族里只要有一个字体文件加载成功就不算失败（unicode-range 分片常见）。 */
+  function collectPage(win, doc) {
+    var de = doc.documentElement;
+    var byFamily = {};
+    var pending = 0;
+    if (doc.fonts && typeof doc.fonts.forEach === 'function') {
+      doc.fonts.forEach(function (face) {
+        var fam = firstFamily(face.family);
+        if (!fam) return;
+        if (!byFamily[fam]) byFamily[fam] = { error: false, loaded: false };
+        if (face.status === 'error') byFamily[fam].error = true;
+        else if (face.status === 'loaded') byFamily[fam].loaded = true;
+        else if (face.status === 'loading') pending++;
+      });
+    }
+    var failed = Object.keys(byFamily).filter(function (f) {
+      return byFamily[f].error && !byFamily[f].loaded;
+    }).sort();
+    return {
+      scrollWidth: de.scrollWidth,
+      clientWidth: de.clientWidth,
+      fontsFailed: failed,
+      fontsPending: pending
+    };
+  }
+
   /* ------------------------------------------------------------------ */
   /* evaluate：纯函数                                                    */
   /* ------------------------------------------------------------------ */
@@ -530,7 +716,8 @@
     var subjects = 0;
     records.forEach(function (r) { if (!r.outside) subjects++; });
 
-    var order = ['DC001', 'DC003', 'DC005', 'DC007', 'DC008', 'DC010', 'DC012', 'DC013'];
+    var order = ['DC001', 'DC003', 'DC005', 'DC007', 'DC008', 'DC010', 'DC012', 'DC013',
+      'DC014', 'DC015', 'DC016', 'DC017'];
     var buckets = {};
     order.forEach(function (id) { buckets[id] = []; });
 
@@ -642,11 +829,72 @@
     var vw = viewport.width || 0;
     var vh = viewport.height || 0;
 
+    /* ---- DC014 / DC017 用：页面级数据（纯函数单测不传时这两条规则不运行） ---- */
+    var page = ctx.page || null;
+    var pageLimit = page ? (page.clientWidth || vw) : vw;
+    var pageOverflow = !!page && page.scrollWidth > page.clientWidth + 1;
+    var overflowCulprit = {};
+    var failedFonts = {};
+    if (page) (page.fontsFailed || []).forEach(function (f) { failedFonts[f] = true; });
+    var fontGroups = {};
+
+    /* 横向能裁住后代的容器（html / body 的 overflow 传给视口，不算），或固定定位（不撑开文档）。 */
+    function containsX(anc) {
+      return (anc.clipX && !VIEWPORT_TAGS[anc.tag]) || anc.pos === 'fixed';
+    }
+
     records.forEach(function (r, i) {
       if (r.outside || !r.vis) return;
       var tag = r.tag;
       var droles = r.drole || '';
       var isCell = !!(CELL_TAGS[tag] || BODY_ROLES[r.role]);
+
+      /* DC014 页面级意外横向溢出：只报最外层伸出视口右边、且没被横向容器收住的元素 */
+      if (pageOverflow && r.pos !== 'fixed' && r.rect.x + r.rect.width > pageLimit + 1 &&
+        !(r.p >= 0 && overflowCulprit[r.p]) && !hasAncestor(i, containsX)) {
+        overflowCulprit[i] = true;
+        add('DC014', i, { right: round1(r.rect.x + r.rect.width), viewport: pageLimit, scrollWidth: page.scrollWidth },
+          '元素右边缘到 ' + round1(r.rect.x + r.rect.width) + 'px，超出视口宽 ' + pageLimit + 'px，把整页撑出横向滚动。复核：' +
+          '是否该放进 overflow-x: auto 的容器（表格、代码块），或改成换行 / 收缩；不要靠给 body 加 overflow: hidden 掩盖。');
+      }
+
+      /* DC015 焦点环被裁：元素整体在裁切容器里，但离容器内边的距离小于焦点环伸出的宽度 */
+      if (r.inter && !r.disabled && r.ring > 0) {
+        for (var ca = r.p; ca >= 0; ca = records[ca].p) {
+          var c = records[ca];
+          if (!c.clip || VIEWPORT_TAGS[c.tag]) continue;
+          var gaps = [];
+          if (c.clipX) gaps.push(r.rect.x - c.clip.x, c.clip.x + c.clip.width - (r.rect.x + r.rect.width));
+          if (c.clipY) gaps.push(r.rect.y - c.clip.y, c.clip.y + c.clip.height - (r.rect.y + r.rect.height));
+          if (!gaps.length) continue;
+          var minGap = Math.min.apply(null, gaps);
+          /* 有一边已经超出容器：元素被滚动到外面了，不是焦点环的问题。 */
+          if (minGap < -0.5) continue;
+          if (minGap < r.ring - 0.5) {
+            add('DC015', i, { ring: r.ring, gap: round1(minGap), container: selectorOf(ca) },
+              '焦点环约向外 ' + r.ring + 'px，但元素离裁切容器 ' + selectorOf(ca) + ' 的内边只有 ' + round1(minGap) + 'px，' +
+              '键盘聚焦时焦点环会被裁掉。复核：给容器留出内边距，或这里改用内描边（--dc-focus-offset-inset）。');
+            break;
+          }
+        }
+      }
+
+      /* DC016 点击被拦截：可交互元素的中心点命中了别的元素，或自己带 pointer-events: none */
+      if (r.inter && !r.disabled && r.noPointer) {
+        add('DC016', i, 'pointer-events: none',
+          '元素看起来可用，但 computed pointer-events 是 none（可能继承自祖先），点击会穿透。' +
+          '复核：暂时不可用时改成 disabled 或 aria-disabled，否则去掉 pointer-events: none。');
+      } else if (r.hitBy) {
+        add('DC016', i, r.hitBy,
+          '元素中心点被 ' + r.hitBy + ' 盖住，点击到不了它。复核：遮挡层是否该有 pointer-events: none，' +
+          '或层级、定位是否写错；对话框、菜单这类盖住外部控件的有意遮挡不在此列。');
+      }
+
+      /* DC017 字体回退：按第一字体族分组，组内取第一个未忽略的元素报告；忽略的元素不计数 */
+      if (r.ff && failedFonts[r.ff] && r.hasText && !ignored(i, 'DC017')) {
+        if (!fontGroups[r.ff]) fontGroups[r.ff] = { idx: i, count: 0 };
+        fontGroups[r.ff].count++;
+      }
 
       /* DC001 字号过小 */
       if (r.hasText) {
@@ -748,6 +996,26 @@
       }
     });
 
+    var firstSubject = -1;
+    for (var fi = 0; fi < records.length; fi++) {
+      if (!records[fi].outside) { firstSubject = fi; break; }
+    }
+
+    /* DC014：整页能横向滚动却找不到伸出的元素（如负外边距、伪元素撑开）时，报在 root 上；只查局部 root 时不报。 */
+    if (pageOverflow && !Object.keys(overflowCulprit).length && rootSel === 'html' && firstSubject >= 0) {
+      add('DC014', firstSubject, { right: page.scrollWidth, viewport: pageLimit, scrollWidth: page.scrollWidth },
+        '文档宽 ' + page.scrollWidth + 'px，超出视口宽 ' + pageLimit + 'px，整页可以横向滚动，但没定位到伸出的元素。' +
+        '复核：检查伪元素、负外边距和 transform。', { x: 0, y: 0, width: page.scrollWidth, height: vh }, rootSel);
+    }
+
+    /* DC017 */
+    Object.keys(fontGroups).sort().forEach(function (fam) {
+      var g = fontGroups[fam];
+      add('DC017', g.idx, { family: fam, count: g.count },
+        '字体族「' + fam + '」的字体文件加载失败，' + g.count + ' 个带文字的元素实际回退到了后备字体。' +
+        '复核：@font-face 的 src 路径、跨域与格式；computed font-family 不能证明字体真的生效。');
+    });
+
     /* DC012：同组多于一个，每个都告警 */
     Object.keys(primaryGroups).forEach(function (scope) {
       var group = primaryGroups[scope];
@@ -838,6 +1106,14 @@
       lists: lists
     };
     if (accentApprox) metrics.accentApprox = true;
+    if (page) {
+      metrics.page = {
+        scrollWidth: page.scrollWidth,
+        clientWidth: page.clientWidth,
+        fontsFailed: (page.fontsFailed || []).slice(),
+        fontsPending: page.fontsPending || 0
+      };
+    }
 
     return {
       schema: SCHEMA,
@@ -872,6 +1148,7 @@
       viewport: { width: win.innerWidth, height: win.innerHeight },
       touch: touch,
       tokens: readTokens(win, doc),
+      page: collectPage(win, doc),
       root: opts.root || 'html',
       maxFindings: opts.maxFindings > 0 ? opts.maxFindings : DEFAULT_MAX_FINDINGS
     };

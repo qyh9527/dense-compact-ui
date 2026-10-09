@@ -7,7 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { findBrowser, runAudit } from '../scripts/run-audit.mjs';
+import { findBrowser, runAudit, runAudits } from '../scripts/run-audit.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const cli = path.join(here, '..', 'scripts', 'run-audit.mjs');
@@ -212,5 +212,65 @@ test('真实浏览器：dense-audit.js 对 fixture 的检出', { timeout: STEP_T
     assert.equal(result.status, 2);
     assert.match(result.stderr, /本地文件不存在/);
     assert.equal(result.stdout, '');
+  });
+});
+
+test('真实浏览器：运行时探针 DC014–DC017 的坏例与好例，多视口', { timeout: STEP_TIMEOUT * 2 }, async (t) => {
+  if (!findBrowser()) {
+    t.skip(SKIP_REASON);
+    return;
+  }
+  const viewports = [{ width: 1280, height: 720 }, { width: 390, height: 844 }];
+
+  await t.test('runtime-bad.html：两个视口都检出 DC014–DC017，且不改 DOM', async () => {
+    const { runs } = await runAudits({ target: fixture('runtime-bad.html'), viewports });
+    assert.equal(runs.length, 2);
+    runs.forEach(({ report, htmlLengthBefore, htmlLengthAfter }, k) => {
+      const counts = ruleCounts(report);
+      t.diagnostic(`runtime-bad ${JSON.stringify(report.context.viewport)}：${JSON.stringify(counts)} page=${JSON.stringify(report.metrics.page)}`);
+      assert.deepEqual(report.context.viewport, viewports[k]);
+      for (const rule of ['DC014', 'DC015', 'DC017']) {
+        assert.equal(counts[rule], 1, `${rule} 应恰好一条：${JSON.stringify(counts)}`);
+      }
+      const by = (rule) => report.findings.find((f) => f.rule === rule);
+      assert.equal(by('DC015').selector, '#flush');
+      assert.equal(by('DC015').value.ring, 4, '焦点环宽度应从 :focus-visible 规则的 token 展开为 2px + 2px');
+      // 页面上的透明层、对话框内部的遮挡层、自身 pointer-events: none 各一条。
+      assert.deepEqual(
+        report.findings.filter((f) => f.rule === 'DC016').map((f) => f.selector).sort(),
+        ['#covered', '#covered-in-dialog', '#no-pointer'],
+      );
+      assert.equal(report.findings.find((f) => f.selector === '#no-pointer').value, 'pointer-events: none');
+      assert.deepEqual(by('DC017').value, { family: 'missing brand', count: 1 });
+      assert.equal(by('DC014').value.viewport, viewports[k].width);
+      assert.equal(htmlLengthAfter, htmlLengthBefore, '注入与执行不得改动 DOM');
+    });
+  });
+
+  await t.test('runtime-good.html：横向滚动容器、内描边、角标、装饰层、非模态对话框、未使用的字体都不告警', async () => {
+    const { runs } = await runAudits({ target: fixture('runtime-good.html'), viewports });
+    for (const { report } of runs) {
+      assert.deepEqual(report.findings, [], `${JSON.stringify(report.context.viewport)} 不应有告警：${JSON.stringify(report.findings, null, 2)}`);
+      assert.equal(report.metrics.page.scrollWidth, report.metrics.page.clientWidth);
+    }
+  });
+
+  await t.test('CLI：重复 --viewport 输出多视口报告，有告警时退出码 1', () => {
+    const result = runCli([fixture('runtime-bad.html'), '--viewport', '1280x720', '--viewport', '390x844']);
+    assert.equal(result.status, 1, `退出码应为 1，stderr：${result.stderr}`);
+    const out = JSON.parse(result.stdout);
+    assert.equal(out.schema, 'dense-audit-multi-v1');
+    assert.deepEqual(out.reports.map((r) => r.context.viewport), viewports);
+    assert.equal(out.totalFindings, out.reports.reduce((s, r) => s + r.totalFindings, 0));
+    for (const r of out.reports) assert.equal(r.schema, 'dense-audit-v1');
+  });
+
+  await t.test('CLI：--viewport 格式错误或与 --width 混用时退出码 2', () => {
+    const bad = runCli([fixture('runtime-good.html'), '--viewport', '390*844']);
+    assert.equal(bad.status, 2);
+    assert.match(bad.stderr, /--viewport/);
+    const mixed = runCli([fixture('runtime-good.html'), '--viewport', '390x844', '--width', '1280']);
+    assert.equal(mixed.status, 2);
+    assert.match(mixed.stderr, /不能和 --width/);
   });
 });

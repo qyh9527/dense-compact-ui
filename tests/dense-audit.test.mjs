@@ -477,3 +477,125 @@ test('findings 按规则号排序，且不含页面文本字段', () => {
     assert.deepEqual(Object.keys(f).sort(), ['message', 'rect', 'rule', 'selector', 'value']);
   }
 });
+
+// ---- DC014–DC017：运行时探针 ----
+
+const page = (over = {}) => ({ scrollWidth: 1000, clientWidth: 1000, fontsFailed: [], fontsPending: 0, ...over });
+
+test('DC014：页面可横向滚动时只报最外层伸出视口的元素', () => {
+  const report = run([
+    rec({ tag: 'html', seg: 'html' }),
+    rec({ p: 0, tag: 'div', seg: '#wide', rect: { x: 0, y: 0, width: 1500, height: 24 } }),
+    rec({ p: 1, tag: 'span', rect: { x: 0, y: 0, width: 1400, height: 24 } }),
+  ], { page: page({ scrollWidth: 1500 }) });
+  const hits = only(report, 'DC014');
+  assert.equal(hits.length, 1);
+  assert.equal(hits[0].selector, '#wide');
+  assert.deepEqual(hits[0].value, { right: 1500, viewport: 1000, scrollWidth: 1500 });
+});
+
+test('DC014：宽内容在横向滚动容器或固定定位里不报；html / body 的 overflow 不算容器', () => {
+  const report = run([
+    rec({ tag: 'html', clipX: true }),
+    rec({ p: 0, tag: 'body', clipX: true }),
+    rec({ p: 1, tag: 'div', clipX: true }),
+    rec({ p: 2, tag: 'table', rect: { x: 0, y: 0, width: 1500, height: 24 } }),
+    rec({ p: 1, tag: 'aside', pos: 'fixed', rect: { x: 900, y: 0, width: 300, height: 24 } }),
+    rec({ p: 1, tag: 'section', seg: '#bad', rect: { x: 0, y: 0, width: 1200, height: 24 } }),
+  ], { page: page({ scrollWidth: 1200 }) });
+  assert.deepEqual(only(report, 'DC014').map((f) => f.selector), ['#bad']);
+});
+
+test('DC014：页面不能横向滚动时不报；整页溢出但找不到元素时报在 root；只查局部 root 时不兜底', () => {
+  const wide = [rec({ tag: 'div', rect: { x: 0, y: 0, width: 1500, height: 24 } })];
+  assert.equal(only(run(wide, { page: page() }), 'DC014').length, 0, '文档宽等于视口宽');
+  assert.equal(only(run(wide), 'DC014').length, 0, '没有页面级数据时不运行');
+
+  const fallback = only(run([rec({ tag: 'html' })], { page: page({ scrollWidth: 1100 }) }), 'DC014');
+  assert.equal(fallback.length, 1);
+  assert.equal(fallback[0].selector, 'html');
+  assert.equal(only(run([rec({ tag: 'main' })], { page: page({ scrollWidth: 1100 }), root: 'main' }), 'DC014').length, 0);
+});
+
+const clipBox = (over = {}) => rec({
+  tag: 'div', clipX: true, clipY: true, rect: { x: 0, y: 0, width: 300, height: 100 },
+  clip: { x: 0, y: 0, width: 300, height: 100 }, ...over,
+});
+
+test('DC015：离裁切容器内边小于焦点环宽度时报，留够内边距不报', () => {
+  const report = run([
+    clipBox({ seg: '#box' }),
+    rec({ p: 0, tag: 'button', seg: '#flush', inter: true, ring: 4, rect: { x: 0, y: 10, width: 80, height: 22 } }),
+    rec({ p: 0, tag: 'button', seg: '#padded', inter: true, ring: 4, rect: { x: 100, y: 10, width: 80, height: 22 } }),
+  ]);
+  const hits = only(report, 'DC015');
+  assert.deepEqual(hits.map((f) => f.selector), ['#flush']);
+  assert.deepEqual(hits[0].value, { ring: 4, gap: 0, container: '#box' });
+});
+
+test('DC015：内描边、已禁用、滚出容器、只在另一方向裁切、视口级容器都不报', () => {
+  const report = run([
+    clipBox(),
+    rec({ p: 0, tag: 'button', inter: true, ring: 0, rect: { x: 0, y: 10, width: 80, height: 22 } }),
+    rec({ p: 0, tag: 'button', inter: true, ring: 4, disabled: true, rect: { x: 0, y: 10, width: 80, height: 22 } }),
+    rec({ p: 0, tag: 'button', inter: true, ring: 4, rect: { x: 10, y: 90, width: 80, height: 22 } }),
+    clipBox({ clipY: false }),
+    rec({ p: 4, tag: 'button', inter: true, ring: 4, rect: { x: 100, y: 0, width: 80, height: 22 } }),
+    clipBox({ tag: 'body' }),
+    rec({ p: 6, tag: 'button', inter: true, ring: 4, rect: { x: 0, y: 0, width: 80, height: 22 } }),
+  ]);
+  assert.equal(only(report, 'DC015').length, 0, JSON.stringify(only(report, 'DC015')));
+});
+
+test('DC016：有 hitBy 的元素报出遮挡者，data-dc-ignore 带理由时跳过', () => {
+  const report = run([
+    rec({ tag: 'button', seg: '#a', inter: true, hitBy: 'div.cover' }),
+    rec({ tag: 'button', seg: '#b', inter: true, hitBy: 'div.cover', ign: 'DC016', ignWhy: '拖拽时的临时遮罩' }),
+  ]);
+  const hits = only(report, 'DC016');
+  assert.deepEqual(hits.map((f) => f.selector), ['#a']);
+  assert.equal(hits[0].value, 'div.cover');
+});
+
+test('DC017：字体族加载失败时按族合并，一族一条并给出受影响元素数', () => {
+  const report = run([
+    rec({ tag: 'p', seg: '#first', hasText: true, ff: 'brand sans' }),
+    rec({ tag: 'p', hasText: true, ff: 'brand sans' }),
+    rec({ tag: 'p', hasText: true, ff: 'system-ui' }),
+  ], { page: page({ fontsFailed: ['brand sans'] }) });
+  const hits = only(report, 'DC017');
+  assert.equal(hits.length, 1);
+  assert.equal(hits[0].selector, '#first');
+  assert.deepEqual(hits[0].value, { family: 'brand sans', count: 2 });
+  assert.deepEqual(report.metrics.page.fontsFailed, ['brand sans']);
+});
+
+test('DC017：失败的字体没有元素在用时不报；没有页面级数据时不出 metrics.page', () => {
+  const unused = run([rec({ tag: 'p', hasText: true, ff: 'system-ui' })], { page: page({ fontsFailed: ['brand sans'] }) });
+  assert.equal(only(unused, 'DC017').length, 0);
+  const noPage = run([rec({ tag: 'p', hasText: true, ff: 'brand sans' })]);
+  assert.equal(only(noPage, 'DC017').length, 0);
+  assert.equal(noPage.metrics.page, undefined);
+});
+
+test('DC016：可交互且未禁用、带 pointer-events: none 时报；已禁用的不报', () => {
+  const report = run([
+    rec({ tag: 'button', seg: '#np', inter: true, noPointer: true }),
+    rec({ tag: 'button', seg: '#off', inter: true, noPointer: true, disabled: true }),
+  ]);
+  const hits = only(report, 'DC016');
+  assert.deepEqual(hits.map((f) => f.selector), ['#np']);
+  assert.equal(hits[0].value, 'pointer-events: none');
+});
+
+test('DC017：忽略只作用于带标注的元素，不压掉整组，也不计数', () => {
+  const report = run([
+    rec({ tag: 'p', seg: '#skip', hasText: true, ff: 'brand sans', ign: 'DC017', ignWhy: '品牌字体缺失时的有意回退演示' }),
+    rec({ tag: 'p', seg: '#a', hasText: true, ff: 'brand sans' }),
+    rec({ tag: 'p', hasText: true, ff: 'brand sans' }),
+  ], { page: page({ fontsFailed: ['brand sans'] }) });
+  const hits = only(report, 'DC017');
+  assert.equal(hits.length, 1);
+  assert.equal(hits[0].selector, '#a');
+  assert.deepEqual(hits[0].value, { family: 'brand sans', count: 2 });
+});

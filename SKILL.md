@@ -7,7 +7,7 @@ description: 紧凑高信息密度界面的设计、实现与评审指导：高�
 
 本文件是入口和索引：每次都做「确认 → 判读 → 按索引读参考 → 检查并贴出结果」；细则都在 references/，只读当前任务用得到的文件。
 
-审计、评审、打磨、精简或加固已有界面时，先读 [quality-workflow.md](references/quality-workflow.md) 选择路径与完成条件；只要求审计或评审时只报告，要求修复时再改文件。
+审计、评审、打磨、精简或加固已有界面时，先读 [quality-workflow.md](references/quality-workflow.md) 选择路径与完成条件；只要求审计或评审时只报告，要求修复时再改文件。验收分快检和完整两条路由：局部小改走快检，共享样式、新页面、改版和交付前走完整，用户没指定时按 quality-workflow.md 的「选验收路由」判断；快检结论最高是 partial，不能写成验收通过。
 
 ## 1. 先判页面任务，再确认是否采用
 
@@ -73,9 +73,9 @@ description: 紧凑高信息密度界面的设计、实现与评审指导：高�
 | 树形导航、文件管理、拖放 | [tree.md](references/tree.md) |
 | 设置页：分组、搜索、保存方式、恢复默认 | [settings.md](references/settings.md) |
 | 改版已有界面、项目已有组件库 | [redesign.md](references/redesign.md) |
-| 审计、设计评审、打磨、精简、边界加固；问题证据、优先级与复验 | [quality-workflow.md](references/quality-workflow.md) |
+| 审计、设计评审、打磨、精简、边界加固；快检 / 完整验收路由、验收契约、证据等级、问题优先级与复验 | [quality-workflow.md](references/quality-workflow.md) |
 | 产品事实与视觉约定分层、页面模式细则、桌面 / 原生 / 跨平台验证 | [context.md](references/context.md) |
-| Web 页面量取：行高、可见项数、强调色面积、刻度偏离与常见违规 | [audit-script.md](references/audit-script.md) |
+| Web 页面量取：行高、可见项数、强调色面积、刻度偏离、横向溢出、焦点环裁切、点击遮挡、字体回退，多视口一次跑 | [audit-script.md](references/audit-script.md) |
 | Tailwind、shadcn、Ant Design、Element Plus、MUI 等落地密度与主题（含配置片段） | [stacks.md](references/stacks.md) |
 | 选图标库、图标尺寸、操作对应的图标 | [icons.md](references/icons.md) |
 | 动效：弹出层、展开收起、列表增删、视图切换、拖拽 | [motion.md](references/motion.md) |
