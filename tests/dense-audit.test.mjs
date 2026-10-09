@@ -655,6 +655,15 @@ test('DC021：文字颜色写死、切到深色后对比度不足时报，记录
   assert.deepEqual(themeDiff(dark, light, { scheme: 'light' }), [], '反方向在浅色下达标，不报');
 });
 
+test('DC021：写死的半透明文字色按原始 RGBA 判断没变，对比度用叠到背景上的值', () => {
+  const light = { canvas: WHITE, items: [item('#a', { fg: [102, 102, 102], fgRaw: [0, 0, 0, 0.6], bg: WHITE })] };
+  const dark = { canvas: DARK, items: [item('#a', { fg: [10, 10, 11], fgRaw: [0, 0, 0, 0.6], bg: DARK })] };
+  const out = themeDiff(light, dark, { scheme: 'dark' });
+  assert.deepEqual(out.map((f) => [f.selector, f.value.unchanged]), [['#a', 'color']]);
+  const varied = { canvas: DARK, items: [item('#a', { fg: [10, 10, 11], fgRaw: [0, 0, 0, 0.3], bg: DARK })] };
+  assert.deepEqual(themeDiff(light, varied, { scheme: 'dark' }), [], '透明度也变了，说明颜色跟着主题走');
+});
+
 test('DC021：两种配色都跟着变、或大字达到 3:1 时不报；页面底色没切深浅时不比较', () => {
   const light = { canvas: WHITE, items: [
     item('#ok', { fg: [31, 35, 40], bg: WHITE }),

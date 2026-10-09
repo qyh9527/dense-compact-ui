@@ -43,6 +43,11 @@ section {
   color: #333333;
 }
 
+/* 深色下看不清：写死的半透明黑字，叠到两种底色上的结果不同，但颜色本身没跟主题变。 */
+#alpha-text {
+  color: rgb(0 0 0 / 60%);
+}
+
 /* 浅色下看不清：文字颜色写死成浅灰。 */
 #hard-light-text {
   color: #dddddd;
@@ -53,6 +58,7 @@ section {
 <h1>主题残色</h1>
 <section id="legacy" class="legacy-panel"><p>旧版说明面板里的文字</p></section>
 <section><p id="hard-dark-text">写死深灰色的说明文字</p></section>
+<section><p id="alpha-text">写死半透明黑色的说明文字</p></section>
 <section><p id="hard-light-text">写死浅灰色的说明文字</p></section>
 </body>
 </html>

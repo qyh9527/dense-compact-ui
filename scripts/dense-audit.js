@@ -1284,7 +1284,8 @@
   /* 颜色快照，只读 DOM，不含页面正文文本：
    *   canvas  页面底色（body 的有效背景，没有就取 html）[r, g, b]
    *   items   可见元素：k 完整路径（两次加载间对齐用）、sel 报告用的短选择器、rect；
-   *           有直接文字时 fg / bg 为叠到底色上的文字色与有效背景色，large 表示大字（门槛按 3:1）；
+   *           有直接文字时 fg / bg 为叠到底色上的文字色与有效背景色，fgRaw 为叠之前的 [r, g, b, a]，
+   *           large 表示大字（门槛按 3:1）；
    *           自身背景不透明时 own 为该色，area 为它在视口内的面积占比
    * 背景链上遇到 background-image 时有效背景未知，跳过该元素；图片、视频、svg 等不参与。 */
   function collectColors(win, doc, opts) {
@@ -1383,6 +1384,7 @@
           var weight = parseInt(cs.fontWeight, 10) || 400;
           item = {
             fg: fg[3] >= 0.999 ? fg.slice(0, 3) : blend(fg, bg),
+            fgRaw: [fg[0], fg[1], fg[2], Math.round(fg[3] * 1000) / 1000],
             bg: bg,
             large: size >= 24 || (size >= 18.66 && weight >= 700)
           };
@@ -1412,7 +1414,8 @@
   /* 比较同一页面在两种配色方案下的颜色快照，返回在 b 方案下出现的 DC021 发现（结构同报告 findings）。
    * 只有页面底色亮度明显变化（确实切了深浅）时才比较；按完整路径 k 对齐两次加载的元素。
    *   surface  自身背景两次相同、接近中性灰，在 a 下与底色同深浅、在 b 下相反：成了局部反色，只报最外层
-   *   text     在 a 下达标、在 b 下对比度不足，且文字色或背景色有一个两次完全相同：颜色写死了没跟主题
+   *   text     在 a 下达标、在 b 下对比度不足，且文字色或背景色有一个两次完全相同：颜色写死了没跟主题；
+   *            文字色按叠到背景之前的原始 RGBA 比较，写死的半透明色叠到不同底色上也算没变
    * 已报 surface 的区域里的元素不再报。 */
   function themeDiff(a, b, ctx) {
     ctx = ctx || {};
@@ -1424,6 +1427,8 @@
     a.items.forEach(function (it) { byKey[it.k] = it; });
     function dark(rgb) { return luminance(rgb) < 0.18; }
     function same(x, y) { return !!x && !!y && x[0] === y[0] && x[1] === y[1] && x[2] === y[2]; }
+    function alpha(x) { return x[3] === undefined ? 1 : x[3]; }
+    function sameRaw(x, y) { return same(x, y) && Math.abs(alpha(x) - alpha(y)) < 0.01; }
     function neutral(rgb) { return Math.max(rgb[0], rgb[1], rgb[2]) - Math.min(rgb[0], rgb[1], rgb[2]) <= 30; }
     function css(rgb) { return 'rgb(' + rgb[0] + ', ' + rgb[1] + ', ' + rgb[2] + ')'; }
     var islands = [];
@@ -1451,7 +1456,7 @@
         var need = it.large ? 3 : 4.5;
         var now = contrast(it.fg, it.bg);
         var before = contrast(prev.fg, prev.bg);
-        var stuck = same(it.fg, prev.fg) ? 'color' : (same(it.bg, prev.bg) ? 'background' : null);
+        var stuck = sameRaw(it.fgRaw || it.fg, prev.fgRaw || prev.fg) ? 'color' : (same(it.bg, prev.bg) ? 'background' : null);
         if (now < need && before >= need && stuck) {
           out.push({
             rule: 'DC021',

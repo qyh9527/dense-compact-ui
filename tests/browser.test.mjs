@@ -289,7 +289,7 @@ test('真实浏览器：--color-scheme 深浅两种配色下的主题残色 DC02
     return;
   }
 
-  await t.test('theme-bad.html：浅色下报写死的浅灰字，深色下报白色孤岛与写死的深灰字', async () => {
+  await t.test('theme-bad.html：浅色下报写死的浅灰字，深色下报白色孤岛、写死的深灰字与半透明黑字', async () => {
     const { runs } = await runAudits({
       target: fixture('theme-bad.html'), viewports: [{ width: 1280, height: 720 }], colorSchemes: ['light', 'dark'],
     });
@@ -297,7 +297,8 @@ test('真实浏览器：--color-scheme 深浅两种配色下的主题残色 DC02
     const pick = (report) => report.findings.filter((f) => f.rule === 'DC021').map((f) => [f.selector, f.value.kind]);
     t.diagnostic(`light: ${JSON.stringify(pick(runs[0].report))} dark: ${JSON.stringify(pick(runs[1].report))}`);
     assert.deepEqual(pick(runs[0].report), [['#hard-light-text', 'text']]);
-    assert.deepEqual(pick(runs[1].report), [['#legacy', 'surface'], ['#hard-dark-text', 'text']]);
+    assert.deepEqual(pick(runs[1].report), [['#legacy', 'surface'], ['#hard-dark-text', 'text'], ['#alpha-text', 'text']]);
+    assert.equal(runs[1].report.findings.find((f) => f.selector === '#alpha-text').value.unchanged, 'color');
     for (const { report, htmlLengthBefore, htmlLengthAfter } of runs) {
       assert.equal(report.totalFindings, report.findings.length);
       assert.equal(htmlLengthAfter, htmlLengthBefore, '注入与执行不得改动 DOM');
@@ -319,7 +320,7 @@ test('真实浏览器：--color-scheme 深浅两种配色下的主题残色 DC02
     const out = JSON.parse(result.stdout);
     assert.equal(out.schema, 'dense-audit-multi-v1');
     assert.deepEqual(out.reports.map((r) => [r.context.colorScheme, r.context.viewport.width]), [['light', 1280], ['dark', 1280]]);
-    assert.equal(out.totalFindings, 3);
+    assert.equal(out.totalFindings, 4);
     const bad = runCli([fixture('theme-good.html'), '--color-scheme', 'sepia']);
     assert.equal(bad.status, 2);
     assert.match(bad.stderr, /--color-scheme/);
