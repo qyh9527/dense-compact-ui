@@ -17,7 +17,8 @@ node <技能目录>/scripts/run-audit.mjs http://localhost:5173/nodes --touch --
 - `--screenshot <目录>`：每份报告量取前截一张当前视口的 PNG 存进该目录（没有就新建，同名覆盖），文件名形如 `03-390x844-dark-展开.png`（序号与报告顺序一致，没有配色或状态时省略），路径写在 `context.screenshot`。修复前后各存一个目录，同名文件就是同一视口、配色和状态，供 quality-workflow.md 的观感检查并排对比。截图不影响告警和退出码；画面里有真实数据时，按数据的敏感程度保存和分享。
 - 页面加载后默认等 DOM 连续 500ms 不变再采集（最多 10 秒，`--settle <毫秒>` 调整，0 关闭），然后等网页字体加载结束（最多 5 秒）。数据靠接口或异步组件晚到的页面，用 `--wait-for <选择器>` 指定代表真实内容已渲染的元素，比如表格首行；只靠静默等待可能量到加载壳。报告的 `context.ready` 记录实际等待：`settled: false` 表示传了 `--settle 0` 跳过，或等满 10 秒页面仍在变化，后者要检查页面是否有持续动画或轮询。
 - `--touch`：输入含触屏时加，才检查 44px 热区；不加时按页面的 `pointer: coarse` 判断。
-- 退出码 0 无告警、1 有告警、2 浏览器或页面出错（原因在 stderr）。找不到浏览器时设 `CHROME_PATH`。
+- 退出码 0 无告警、1 有告警、2 浏览器或页面出错（原因在 stderr）。
+- 浏览器按 `CHROME_PATH`、再按平台的常见安装位置查找：Windows 查 Edge、Chrome 的默认目录，macOS 查 `/Applications` 与 `~/Applications` 下的 Chrome、Edge，其他系统查 `/usr/bin/google-chrome`、`/usr/bin/chromium`。装在别处时把 `CHROME_PATH` 设为可执行文件的完整路径，如 macOS 的 `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`。找不到时退出码 2，stderr 列出查过的路径；这时没有执行任何量取，静态检查照做，需要浏览器的视觉与运行时项标「未验证」，验收结论按 quality-workflow.md 记 blocked 或 partial，不能当作零告警。
 - 每个要验收的状态（默认、展开、错误、窄屏）各跑一次，和截图一起记录。要先操作才能到达的状态，用 `--steps` 写步骤文件；需要登录等 CLI 到不了的状态，改用下一种方式。
 - `--steps steps.json`：加载后按顺序执行步骤，每步写一个动作——`click`、`hover`（选择器）、`fill`（选择器 + `value`）、`press`（Enter、Escape、Tab、方向键等或单个字符）、`select`（选择器 + 选项的 `value` 或文字）、`wait`（等选择器可见，默认 5 秒）、`expect`（选择器，可加 `count`、`text`、`visible: false`，默认等 2 秒）；`timeout` 可改等待毫秒数。在 `{ "audit": "状态名" }` 处各量一次，没写就在最后量一次；某一步找不到元素或期望落空时记 DC023、在该处量一次并停下。输出同多视口格式，`context.state` 是状态名。只执行文件里写的动作；提交、删除、发送这类步骤只对模拟数据或沙箱环境跑。
 

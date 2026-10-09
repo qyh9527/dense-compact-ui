@@ -19,7 +19,8 @@
 // --settle：再等 DOM 连续这么多毫秒没有变化（默认 500，最多等 10 秒；0 跳过）。
 // 退出码：0 没有告警；1 有告警；2 浏览器、导航或脚本出错（原因写到 stderr）。
 //
-// 也导出 runAudit / runAudits / checkSteps / screenshotName / findBrowser，供 tests/browser.test.mjs 复用同一套 CDP 逻辑。
+// 也导出 runAudit / runAudits / checkSteps / screenshotName / findBrowser / browserCandidates / browserMissingMessage，
+// 供测试复用同一套 CDP 逻辑与浏览器查找。
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -100,16 +101,42 @@ function withTimeout(promise, ms, reason) {
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
-/** 按 CHROME_PATH、Edge、Chrome、Linux 路径的顺序找浏览器，找不到返回 null。 */
-export function findBrowser() {
-  const candidates = [
-    process.env.CHROME_PATH,
-    'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
-    'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-    '/usr/bin/google-chrome',
-    '/usr/bin/chromium',
-  ];
-  return candidates.find((p) => p && fs.existsSync(p)) || null;
+/** 要查找的浏览器路径：CHROME_PATH 在前，再按平台列 Edge / Chrome 的常见安装位置。 */
+export function browserCandidates({ env = process.env, platform = process.platform, home = os.homedir() } = {}) {
+  const byPlatform = {
+    win32: [
+      'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+      'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+    ],
+    darwin: [
+      '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+      '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
+      `${home}/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`,
+      `${home}/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge`,
+    ],
+  };
+  const fallback = ['/usr/bin/google-chrome', '/usr/bin/chromium'];
+  return [env.CHROME_PATH, ...(byPlatform[platform] || fallback)].filter(Boolean);
+}
+
+/** 按 browserCandidates 的顺序找第一个存在的浏览器，找不到返回 null。 */
+export function findBrowser({ exists = fs.existsSync, ...opts } = {}) {
+  return browserCandidates(opts).find((p) => exists(p)) || null;
+}
+
+/** 找不到浏览器时的中文原因：列出查过的路径，并给出设置 CHROME_PATH 的办法。 */
+export function browserMissingMessage({ env = process.env, platform = process.platform, ...opts } = {}) {
+  const checked = browserCandidates({ env, platform, ...opts });
+  const example = {
+    win32: '$env:CHROME_PATH = "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"',
+    darwin: 'export CHROME_PATH="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"',
+  }[platform] || 'export CHROME_PATH=/usr/bin/chromium';
+  return [
+    '未找到 Chromium 内核浏览器（Chrome / Edge / Chromium），没有执行任何量取。',
+    env.CHROME_PATH ? `CHROME_PATH 指向的文件不存在：${env.CHROME_PATH}` : null,
+    `已查找：${checked.join('；')}`,
+    `请安装 Chrome 或 Edge，或把 CHROME_PATH 设为浏览器可执行文件的完整路径，例如：${example}`,
+  ].filter(Boolean).join('\n');
 }
 
 // 启动浏览器并等 DevToolsActivePort 出现，返回调试端口。
@@ -572,7 +599,7 @@ export async function runAudits({
   if (!Array.isArray(viewports) || !viewports.length) throw new Error('缺少视口：viewports 至少要有一项');
   if (steps) checkSteps(steps);
   const bin = findBrowser();
-  if (!bin) throw new Error('未找到 Chromium 内核浏览器：请安装 Edge 或 Chrome，或用 CHROME_PATH 指定可执行文件');
+  if (!bin) throw new Error(browserMissingMessage());
   const url = toUrl(target);
   // 截图目录先建好：路径不能用时在启动浏览器前就报错。
   if (screenshot) {

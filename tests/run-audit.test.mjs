@@ -1,7 +1,14 @@
-// run-audit.mjs 里不用浏览器的纯函数：步骤格式校验、发现合并、截图文件名。
+// run-audit.mjs 里不用浏览器的纯函数：步骤格式校验、发现合并、截图文件名、浏览器查找。
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { addFindings, checkSteps, screenshotName } from '../scripts/run-audit.mjs';
+import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import {
+  addFindings, browserCandidates, browserMissingMessage, checkSteps, findBrowser, screenshotName,
+} from '../scripts/run-audit.mjs';
+
+const here = path.dirname(fileURLToPath(import.meta.url));
 
 const report = (n) => ({
   findings: Array.from({ length: n }, (_, i) => ({ rule: 'DC001', selector: `#n${i}` })),
@@ -53,4 +60,59 @@ test('screenshotName：序号补零，按视口、配色、状态拼接；文件
   const emoji = screenshotName(4, { width: 1280, height: 720 }, 'dark', '\u{1F600}'.repeat(60));
   assert.equal(emoji, `04-1280x720-dark-${'\u{1F600}'.repeat(30)}.png`);
   assert.ok(Buffer.byteLength(emoji) <= 255, `${Buffer.byteLength(emoji)} 字节`);
+});
+
+const MAC_CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+const MAC_EDGE = '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge';
+
+test('browserCandidates：CHROME_PATH 在前，再按平台列常见安装路径', () => {
+  const mac = browserCandidates({ env: {}, platform: 'darwin', home: '/Users/a' });
+  assert.deepEqual(mac, [
+    MAC_CHROME, MAC_EDGE,
+    '/Users/a/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+    '/Users/a/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
+  ]);
+  assert.equal(browserCandidates({ env: { CHROME_PATH: '/x/chrome' }, platform: 'darwin', home: '/Users/a' })[0], '/x/chrome');
+  assert.deepEqual(browserCandidates({ env: {}, platform: 'win32' }), [
+    'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+    'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+  ]);
+  assert.deepEqual(browserCandidates({ env: {}, platform: 'linux' }), ['/usr/bin/google-chrome', '/usr/bin/chromium']);
+});
+
+test('findBrowser：按顺序返回第一个存在的路径；CHROME_PATH 不存在时往后找；都不在返回 null', () => {
+  const only = (...paths) => (p) => paths.includes(p);
+  const mac = { env: {}, platform: 'darwin', home: '/Users/a' };
+  assert.equal(findBrowser({ ...mac, exists: only(MAC_EDGE) }), MAC_EDGE);
+  assert.equal(findBrowser({ ...mac, exists: only(MAC_CHROME, MAC_EDGE) }), MAC_CHROME);
+  assert.equal(findBrowser({ ...mac, env: { CHROME_PATH: '/x/chrome' }, exists: only('/x/chrome', MAC_CHROME) }), '/x/chrome');
+  assert.equal(findBrowser({ ...mac, env: { CHROME_PATH: '/x/chrome' }, exists: only(MAC_EDGE) }), MAC_EDGE);
+  assert.equal(findBrowser({ ...mac, exists: () => false }), null);
+});
+
+test('browserMissingMessage：写明没执行量取、查过的路径、按平台的 CHROME_PATH 示例，指出无效的 CHROME_PATH', () => {
+  const mac = browserMissingMessage({ env: {}, platform: 'darwin', home: '/Users/a' });
+  assert.match(mac, /没有执行任何量取/);
+  assert.ok(mac.includes(MAC_EDGE));
+  assert.match(mac, /export CHROME_PATH="\/Applications\/Google Chrome\.app/);
+  assert.doesNotMatch(mac, /指向的文件不存在/);
+  const win = browserMissingMessage({ env: { CHROME_PATH: 'D:\\no\\chrome.exe' }, platform: 'win32' });
+  assert.match(win, /CHROME_PATH 指向的文件不存在：D:\\no\\chrome\.exe/);
+  assert.match(win, /\$env:CHROME_PATH = /);
+});
+
+test('CLI：找不到浏览器时退出码 2，stderr 写原因与恢复办法，stdout 不输出报告', () => {
+  // 子进程里让所有候选路径都「不存在」，模拟没装浏览器的机器。
+  const bogus = path.join(here, 'no-such-browser');
+  const hidden = browserCandidates({ env: { CHROME_PATH: bogus } });
+  const hook = `import fs from 'node:fs'; const hidden = new Set(${JSON.stringify(hidden)}); const real = fs.existsSync; fs.existsSync = (p) => !hidden.has(String(p)) && real(p);`;
+  const r = spawnSync(process.execPath, [
+    '--import', `data:text/javascript,${encodeURIComponent(hook)}`,
+    path.join(here, '..', 'scripts', 'run-audit.mjs'), path.join(here, 'fixtures', 'clean.html'),
+  ], { encoding: 'utf8', env: { ...process.env, CHROME_PATH: bogus }, timeout: 60_000 });
+  assert.equal(r.status, 2, r.stderr);
+  assert.equal(r.stdout, '');
+  assert.match(r.stderr, /未找到 Chromium 内核浏览器/);
+  assert.match(r.stderr, /CHROME_PATH 指向的文件不存在/);
+  assert.match(r.stderr, /CHROME_PATH 设为浏览器可执行文件的完整路径/);
 });
