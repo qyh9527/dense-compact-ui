@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <title>滚动遮挡坏例</title>
 <style>
-/* DC022 坏例：固定顶栏与固定底栏都没给内容留出位置，标题永远在顶栏下面，最后一行永远在底栏下面。
- * 对应的合法写法在 scroll-good.html。 */
+/* DC022 坏例：固定顶栏与固定底栏都没给内容留出位置，标题永远在顶栏下面，最后一行永远在底栏下面；
+ * 首屏之外的内部面板里，粘底操作栏用负外边距压住了面板最后一行。对应的合法写法在 scroll-good.html。 */
 body {
   margin: 0;
   color: #1f2328;
@@ -39,11 +39,55 @@ h1 {
   padding: 0 12px;
   border-bottom: 1px solid #d0d7de;
 }
+.intro {
+  height: 900px;
+  padding: 0 12px;
+}
+.pane {
+  height: 160px;
+  margin: 12px;
+  overflow: auto;
+  border: 1px solid #d0d7de;
+}
+.pane-foot {
+  position: sticky;
+  bottom: 0;
+  height: 28px;
+  margin-top: -28px;
+  padding: 0 12px;
+  background: #f6f8fa;
+  border-top: 1px solid #d0d7de;
+}
 </style>
 </head>
 <body>
 <header class="topbar"><span>顶栏</span></header>
 <h1 id="first-title">订单列表</h1>
+<div class="intro">首屏说明区，把下面的内部面板推到首屏之外。</div>
+<div id="pane" class="pane">
+  <div class="row">面板第 1 行</div>
+  <div class="row">面板第 2 行</div>
+  <div class="row">面板第 3 行</div>
+  <div class="row">面板第 4 行</div>
+  <div class="row">面板第 5 行</div>
+  <div class="row">面板第 6 行</div>
+  <div class="row">面板第 7 行</div>
+  <div class="row">面板第 8 行</div>
+  <div class="row">面板第 9 行</div>
+  <div class="row">面板第 10 行</div>
+  <div class="row">面板第 11 行</div>
+  <div class="row">面板第 12 行</div>
+  <div class="row">面板第 13 行</div>
+  <div class="row">面板第 14 行</div>
+  <div class="row">面板第 15 行</div>
+  <div class="row">面板第 16 行</div>
+  <div class="row">面板第 17 行</div>
+  <div class="row">面板第 18 行</div>
+  <div class="row">面板第 19 行</div>
+  <div class="row">面板第 20 行</div>
+  <div id="pane-last" class="row">面板最后一行</div>
+  <div id="pane-foot" class="pane-foot">面板操作栏</div>
+</div>
 <div class="list">
   <div class="row">第 1 行</div>
   <div class="row">第 2 行</div>

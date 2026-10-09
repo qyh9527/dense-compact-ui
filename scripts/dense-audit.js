@@ -1503,8 +1503,9 @@
 
   /* 滚到顶和滚到底各看一次：内容中心点被固定 / 粘性定位的栏盖住，而这个方向已经滚不动，内容就永远露不出来。
    * 滚到顶时只算靠上半部的栏，滚到底时只算靠下半部的栏；容器根本滚不动时两头都算。
-   * 文档滚动区与最多 MAX_SCROLLERS 个内部滚动容器分别检查，内容归属离它最近的滚动容器。
-   * 检查完恢复原来的滚动位置，不改 DOM。返回 Promise，结果结构同报告 findings 的 DC022 发现。 */
+   * 文档滚动区与最多 MAX_SCROLLERS 个内部滚动容器分别检查，内容归属离它最近的滚动容器；
+   * 内部容器先滚进视口再看，页面级的栏盖住它的内容时，只有文档在这个方向也滚到头了才算。
+   * 检查完恢复文档与各容器原来的滚动位置，不改 DOM。返回 Promise，结果结构同报告 findings 的 DC022 发现。 */
   function scrollCover(win, doc, opts) {
     opts = opts || {};
     var rootEl = opts.root ? doc.querySelector(opts.root) : doc.documentElement;
@@ -1561,6 +1562,8 @@
         };
       }
       var mid = (view.top + view.bottom) / 2;
+      var docMax = docScroller.scrollHeight - docScroller.clientHeight;
+      var docAtEnd = at === 'top' ? docScroller.scrollTop <= 0 : docScroller.scrollTop >= docMax - 1;
       cands.forEach(function (el) {
         if (seen.has(el)) return;
         var r = el.getBoundingClientRect();
@@ -1575,6 +1578,8 @@
         if (h.closest(OVERLAY_SELECTOR)) return;
         var bar = pinnedOf(win, h);
         if (!bar || bar.contains(el)) return;
+        /* 页面级的栏盖住内部容器的内容时，文档还能往这个方向滚，就露得出来。 */
+        if (sc !== docScroller && !sc.contains(bar) && !docAtEnd) return;
         var br = bar.getBoundingClientRect();
         var barOnTop = br.top + br.height / 2 < mid;
         if (!stuck && (at === 'top') !== barOnTop) return;
@@ -1591,12 +1596,26 @@
             scroller: sc === docScroller ? 'document' : shortSelector(segOf, sc)
           },
           message: where + '时内容中心被固定栏 ' + shortSelector(segOf, bar) + ' 盖住，而且这个方向已经滚不动，' +
-            '用户看不到也点不到它。复核：给滚动区留出与栏等高的内边距或 scroll-padding，或让栏占据布局空间。'
+            '用户看不到也点不到它。复核：给滚动区留出与栏等高的内边距或占位元素，或让栏进入文档流占据空间；' +
+            'scroll-padding 不增加可滚动范围，解决不了。'
         });
       });
     }
 
-    var saved = scrollers.map(function (sc) { return sc.scrollTop; });
+    /* 记下会被改动的滚动位置：各滚动容器及其祖先（scrollIntoView 会连带滚动祖先）。 */
+    var saved = [];
+    var savedSet = new Set();
+    scrollers.forEach(function (sc) {
+      for (var n = sc; n && n.nodeType === 1; n = n.parentElement) {
+        if (savedSet.has(n)) continue;
+        savedSet.add(n);
+        saved.push([n, n.scrollTop, n.scrollLeft]);
+      }
+    });
+    function restore() {
+      saved.forEach(function (p) { p[0].scrollTop = p[1]; p[0].scrollLeft = p[2]; });
+    }
+
     var chain = Promise.resolve();
     scrollers.forEach(function (sc, si) {
       if (!groups[si].length) return;
@@ -1604,14 +1623,19 @@
       ['top', 'bottom'].forEach(function (at) {
         chain = chain.then(function () {
           sc.scrollTop = at === 'top' ? 0 : max;
+          /* 内部容器可能在首屏之外：滚进视口再看。放得下就居中，避开页面级的顶栏底栏；放不下按要看的那一端对齐。 */
+          if (sc !== docScroller) {
+            var fits = sc.getBoundingClientRect().height <= win.innerHeight * 0.8;
+            sc.scrollIntoView({ block: fits ? 'center' : (at === 'top' ? 'start' : 'end'), inline: 'nearest' });
+          }
           return nextFrames(win);
         }).then(function () {
           check(sc, at, max <= 1, groups[si]);
         });
       });
-      chain = chain.then(function () { sc.scrollTop = saved[si]; });
+      chain = chain.then(restore);
     });
-    return chain.then(function () { return nextFrames(win); }).then(function () { return found; });
+    return chain.then(restore).then(function () { return nextFrames(win); }).then(function () { return found; });
   }
 
   /* ------------------------------------------------------------------ */

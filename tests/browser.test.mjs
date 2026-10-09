@@ -333,7 +333,7 @@ test('真实浏览器：--scroll 滚到顶 / 底时被固定栏永久盖住的�
     return;
   }
 
-  await t.test('scroll-bad.html：顶部标题在滚到顶时、最后两行在滚到底时被盖住；不开 --scroll 时不检查', async () => {
+  await t.test('scroll-bad.html：顶部标题在滚到顶时、最后两行在滚到底时被盖住，首屏外面板的最后一行被粘底栏盖住；不开 --scroll 时不检查', async () => {
     const plain = (await runAudit({ target: fixture('scroll-bad.html') })).report;
     assert.equal(plain.findings.filter((f) => f.rule === 'DC022').length, 0);
     assert.equal(plain.context.scrollChecked, undefined);
@@ -345,7 +345,8 @@ test('真实浏览器：--scroll 滚到顶 / 底时被固定栏永久盖住的�
     const by = (sel) => hits.find((f) => f.selector === sel);
     assert.deepEqual(by('#first-title').value, { at: 'top', coveredBy: 'html > body > header', scroller: 'document' });
     assert.deepEqual(by('#last-row').value, { at: 'bottom', coveredBy: 'html > body > footer', scroller: 'document' });
-    assert.ok(hits.every((f) => f.value.scroller === 'document'));
+    assert.deepEqual(by('#pane-last').value, { at: 'bottom', coveredBy: '#pane-foot', scroller: '#pane' });
+    assert.ok(hits.filter((f) => f.selector !== '#pane-last').every((f) => f.value.scroller === 'document'));
     assert.equal(report.totalFindings, report.findings.length);
     assert.equal(htmlLengthAfter, htmlLengthBefore, '滚动检查不得改动 DOM');
   });
