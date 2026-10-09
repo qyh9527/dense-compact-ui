@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>滚动遮挡坏例</title>
+<style>
+/* DC022 坏例：固定顶栏与固定底栏都没给内容留出位置，标题永远在顶栏下面，最后一行永远在底栏下面；
+ * 首屏之外的内部面板里，粘底操作栏用负外边距压住了面板最后一行。对应的合法写法在 scroll-good.html。 */
+body {
+  margin: 0;
+  color: #1f2328;
+  background: #ffffff;
+  font: 13px/1.5 system-ui, sans-serif;
+}
+h1 {
+  margin: 0;
+  padding: 12px;
+  font-size: 16px;
+}
+.topbar,
+.bottombar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  height: 48px;
+  padding: 0 12px;
+  background: #f6f8fa;
+}
+.topbar {
+  top: 0;
+  border-bottom: 1px solid #d0d7de;
+}
+.bottombar {
+  bottom: 0;
+  border-top: 1px solid #d0d7de;
+}
+.row {
+  height: 24px;
+  padding: 0 12px;
+  border-bottom: 1px solid #d0d7de;
+}
+.intro {
+  height: 900px;
+  padding: 0 12px;
+}
+.pane {
+  height: 160px;
+  margin: 12px;
+  overflow: auto;
+  border: 1px solid #d0d7de;
+}
+.pane-foot {
+  position: sticky;
+  bottom: 0;
+  height: 28px;
+  margin-top: -28px;
+  padding: 0 12px;
+  background: #f6f8fa;
+  border-top: 1px solid #d0d7de;
+}
+</style>
+</head>
+<body>
+<header class="topbar"><span>顶栏</span></header>
+<h1 id="first-title">订单列表</h1>
+<div class="intro">首屏说明区，把下面的内部面板推到首屏之外。</div>
+<div id="pane" class="pane">
+  <div class="row">面板第 1 行</div>
+  <div class="row">面板第 2 行</div>
+  <div class="row">面板第 3 行</div>
+  <div class="row">面板第 4 行</div>
+  <div class="row">面板第 5 行</div>
+  <div class="row">面板第 6 行</div>
+  <div class="row">面板第 7 行</div>
+  <div class="row">面板第 8 行</div>
+  <div class="row">面板第 9 行</div>
+  <div class="row">面板第 10 行</div>
+  <div class="row">面板第 11 行</div>
+  <div class="row">面板第 12 行</div>
+  <div class="row">面板第 13 行</div>
+  <div class="row">面板第 14 行</div>
+  <div class="row">面板第 15 行</div>
+  <div class="row">面板第 16 行</div>
+  <div class="row">面板第 17 行</div>
+  <div class="row">面板第 18 行</div>
+  <div class="row">面板第 19 行</div>
+  <div class="row">面板第 20 行</div>
+  <div id="pane-last" class="row">面板最后一行</div>
+  <div id="pane-foot" class="pane-foot">面板操作栏</div>
+</div>
+<div class="list">
+  <div class="row">第 1 行</div>
+  <div class="row">第 2 行</div>
+  <div class="row">第 3 行</div>
+  <div class="row">第 4 行</div>
+  <div class="row">第 5 行</div>
+  <div class="row">第 6 行</div>
+  <div class="row">第 7 行</div>
+  <div class="row">第 8 行</div>
+  <div class="row">第 9 行</div>
+  <div class="row">第 10 行</div>
+  <div class="row">第 11 行</div>
+  <div class="row">第 12 行</div>
+  <div class="row">第 13 行</div>
+  <div class="row">第 14 行</div>
+  <div class="row">第 15 行</div>
+  <div class="row">第 16 行</div>
+  <div class="row">第 17 行</div>
+  <div class="row">第 18 行</div>
+  <div class="row">第 19 行</div>
+  <div class="row">第 20 行</div>
+  <div class="row">第 21 行</div>
+  <div class="row">第 22 行</div>
+  <div class="row">第 23 行</div>
+  <div class="row">第 24 行</div>
+  <div class="row">第 25 行</div>
+  <div class="row">第 26 行</div>
+  <div class="row">第 27 行</div>
+  <div class="row">第 28 行</div>
+  <div class="row">第 29 行</div>
+  <div class="row">第 30 行</div>
+  <div class="row">第 31 行</div>
+  <div class="row">第 32 行</div>
+  <div class="row">第 33 行</div>
+  <div class="row">第 34 行</div>
+  <div class="row">第 35 行</div>
+  <div class="row">第 36 行</div>
+  <div class="row">第 37 行</div>
+  <div class="row">第 38 行</div>
+  <div class="row">第 39 行</div>
+  <div class="row">第 40 行</div>
+  <div class="row">第 41 行</div>
+  <div class="row">第 42 行</div>
+  <div class="row">第 43 行</div>
+  <div class="row">第 44 行</div>
+  <div class="row">第 45 行</div>
+  <div class="row">第 46 行</div>
+  <div class="row">第 47 行</div>
+  <div class="row">第 48 行</div>
+  <div class="row">第 49 行</div>
+  <div class="row">第 50 行</div>
+  <div class="row">第 51 行</div>
+  <div class="row">第 52 行</div>
+  <div class="row">第 53 行</div>
+  <div class="row">第 54 行</div>
+  <div class="row">第 55 行</div>
+  <div class="row">第 56 行</div>
+  <div class="row">第 57 行</div>
+  <div class="row">第 58 行</div>
+  <div class="row">第 59 行</div>
+  <div class="row">第 60 行</div>
+  <div id="last-row" class="row">最后一行</div>
+</div>
+<footer class="bottombar"><button type="button">保存</button></footer>
+</body>
+</html>

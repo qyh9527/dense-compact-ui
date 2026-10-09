@@ -10,6 +10,7 @@
  *   collectPage(win, doc)      页面级数据：文档滚动宽度、加载失败的字体族
  *   evaluate(records, ctx)     纯函数：records + ctx -> 报告，可在 Node 里单测
  *   collectColors(win, doc)    颜色快照；themeDiff(a, b) 纯函数比较两种配色方案下的快照（DC021）
+ *   scrollCover(win, doc)      滚到顶 / 底检查内容是否被固定栏永久盖住（DC022），会临时滚动并恢复
  *
  * 字体状态要等 document.fonts.ready 之后才准；run-audit.mjs 会先等，手动注入时先 await 它。
  *
@@ -351,6 +352,26 @@
       return seg;
     }
     return segOf;
+  }
+
+  /* 报告用的短选择器：最多 5 段，遇到 #id 停止。 */
+  function shortSelector(segOf, el) {
+    var parts = [];
+    for (var n = el, depth = 0; n && n.nodeType === 1 && depth < 5; n = n.parentElement, depth++) {
+      var seg = segOf(n);
+      parts.unshift(seg);
+      if (seg.charAt(0) === '#') break;
+    }
+    return parts.join(' > ');
+  }
+
+  /* 元素或祖先带 data-dc-ignore 含该规则（小写 id）且理由非空。 */
+  function attrIgnored(el, rule) {
+    for (var n = el; n && n.nodeType === 1; n = n.parentElement) {
+      var why = n.getAttribute('data-dc-ignore-reason');
+      if (why && why.trim() && hasToken(n.getAttribute('data-dc-ignore'), rule)) return true;
+    }
+    return false;
   }
 
   /* ------------------------------------------------------------------ */
@@ -1339,24 +1360,6 @@
       return p;
     }
 
-    function shortSel(el) {
-      var parts = [];
-      for (var n = el, depth = 0; n && depth < 5; n = n.parentElement, depth++) {
-        var seg = segOf(n);
-        parts.unshift(seg);
-        if (seg.charAt(0) === '#') break;
-      }
-      return parts.join(' > ');
-    }
-
-    function ignoredEl(el) {
-      for (var n = el; n; n = n.parentElement) {
-        var why = n.getAttribute('data-dc-ignore-reason');
-        if (why && why.trim() && hasToken(n.getAttribute('data-dc-ignore'), 'dc021')) return true;
-      }
-      return false;
-    }
-
     var items = [];
     var stack = [rootEl];
     while (stack.length) {
@@ -1368,7 +1371,7 @@
       if (!(rect.width > 0 && rect.height > 0)) continue;
       if (typeof el.checkVisibility === 'function' &&
         !el.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })) continue;
-      if (ignoredEl(el)) continue;
+      if (attrIgnored(el, 'dc021')) continue;
       var bg = effBg(el);
       if (!bg) continue;
 
@@ -1403,7 +1406,7 @@
       }
       if (!item) continue;
       item.k = pathOf(el);
-      item.sel = shortSel(el);
+      item.sel = shortSelector(segOf, el);
       item.rect = { x: round1(rect.x), y: round1(rect.y), width: round1(rect.width), height: round1(rect.height) };
       items.push(item);
     }
@@ -1473,6 +1476,169 @@
   }
 
   /* ------------------------------------------------------------------ */
+  /* 滚动遮挡（DC022）：滚到顶、滚到底时，内容是否被固定 / 吸顶栏永久盖住 */
+  /* ------------------------------------------------------------------ */
+
+  /* 一次检查最多看几个内部滚动容器（按面积从大到小）。 */
+  var MAX_SCROLLERS = 5;
+
+  /* 等两帧让滚动后的布局与绘制落定；后台标签页里 rAF 可能不触发，最多等 200ms。 */
+  function nextFrames(win) {
+    return new Promise(function (resolve) {
+      var done = false;
+      function finish() { if (!done) { done = true; resolve(); } }
+      win.requestAnimationFrame(function () { win.requestAnimationFrame(finish); });
+      win.setTimeout(finish, 200);
+    });
+  }
+
+  /* 自身或祖先是固定 / 粘性定位的元素。 */
+  function pinnedOf(win, el) {
+    for (var n = el; n && n.nodeType === 1; n = n.parentElement) {
+      var pos = win.getComputedStyle(n).position;
+      if (pos === 'fixed' || pos === 'sticky') return n;
+    }
+    return null;
+  }
+
+  /* 滚到顶和滚到底各看一次：内容中心点被固定 / 粘性定位的栏盖住，而这个方向已经滚不动，内容就永远露不出来。
+   * 滚到顶时只算靠上半部的栏，滚到底时只算靠下半部的栏；容器根本滚不动时两头都算。
+   * 文档滚动区与最多 MAX_SCROLLERS 个内部滚动容器分别检查，内容归属离它最近的滚动容器；
+   * 内部容器先滚进视口再看，页面级的栏盖住它的内容时，只有文档在这个方向也滚到头了才算。
+   * 检查完恢复文档与各容器原来的滚动位置，不改 DOM。返回 Promise，结果结构同报告 findings 的 DC022 发现。 */
+  function scrollCover(win, doc, opts) {
+    opts = opts || {};
+    var rootEl = opts.root ? doc.querySelector(opts.root) : doc.documentElement;
+    if (!rootEl) return Promise.reject(new Error('dense-audit：找不到 root 选择器对应的元素：' + opts.root));
+    var segOf = makeSegOf(win);
+    var docScroller = doc.scrollingElement || doc.documentElement;
+
+    var all = [rootEl].concat(Array.prototype.slice.call(rootEl.querySelectorAll('*')));
+    if (all.length > MAX_NODES) {
+      return Promise.reject(new Error('dense-audit：root 内节点超过 ' + MAX_NODES + ' 的上限，请用 root 缩小检查范围'));
+    }
+    var inner = [];
+    all.forEach(function (el) {
+      if (el === docScroller || el === doc.body) return;
+      var cs = win.getComputedStyle(el);
+      if ((cs.overflowY === 'auto' || cs.overflowY === 'scroll') && el.clientHeight > 0 &&
+        el.scrollHeight > el.clientHeight + 1) {
+        var r = el.getBoundingClientRect();
+        inner.push({ el: el, area: r.width * r.height });
+      }
+    });
+    inner.sort(function (x, y) { return y.area - x.area; });
+    var scrollers = [docScroller].concat(inner.slice(0, MAX_SCROLLERS).map(function (s) { return s.el; }));
+
+    /* 内容：可交互元素与带直接文字的元素，本身不在固定 / 粘性栏里；按最近的滚动容器分组。 */
+    var groups = scrollers.map(function () { return []; });
+    all.forEach(function (el) {
+      var text = false;
+      for (var n = el.firstChild; n; n = n.nextSibling) {
+        if (n.nodeType === 3 && /\S/.test(n.data)) { text = true; break; }
+      }
+      if (!text && !el.matches(INTERACTIVE_SELECTOR)) return;
+      if (pinnedOf(win, el)) return;
+      var owner = 0;
+      for (var a = el.parentElement; a; a = a.parentElement) {
+        var k = scrollers.indexOf(a);
+        if (k > 0) { owner = k; break; }
+      }
+      groups[owner].push(el);
+    });
+
+    var found = [];
+    var seen = new Set();
+
+    function check(sc, at, stuck, cands) {
+      var vw = win.innerWidth;
+      var vh = win.innerHeight;
+      var view = { top: 0, left: 0, bottom: vh, right: vw };
+      if (sc !== docScroller) {
+        var sr = sc.getBoundingClientRect();
+        view = {
+          top: Math.max(sr.top, 0), left: Math.max(sr.left, 0),
+          bottom: Math.min(sr.bottom, vh), right: Math.min(sr.right, vw)
+        };
+      }
+      var mid = (view.top + view.bottom) / 2;
+      var docMax = docScroller.scrollHeight - docScroller.clientHeight;
+      var docAtEnd = at === 'top' ? docScroller.scrollTop <= 0 : docScroller.scrollTop >= docMax - 1;
+      cands.forEach(function (el) {
+        if (seen.has(el)) return;
+        var r = el.getBoundingClientRect();
+        if (!(r.width > 0 && r.height > 0)) return;
+        if (typeof el.checkVisibility === 'function' &&
+          !el.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })) return;
+        var cx = r.left + r.width / 2;
+        var cy = r.top + r.height / 2;
+        if (cx < view.left || cx >= view.right || cy < view.top || cy >= view.bottom) return;
+        var h = doc.elementFromPoint(cx, cy);
+        if (!h || h === el || el.contains(h) || h.contains(el)) return;
+        if (h.closest(OVERLAY_SELECTOR)) return;
+        var bar = pinnedOf(win, h);
+        if (!bar || bar.contains(el)) return;
+        /* 页面级的栏盖住内部容器的内容时，文档还能往这个方向滚，就露得出来。 */
+        if (sc !== docScroller && !sc.contains(bar) && !docAtEnd) return;
+        var br = bar.getBoundingClientRect();
+        var barOnTop = br.top + br.height / 2 < mid;
+        if (!stuck && (at === 'top') !== barOnTop) return;
+        if (attrIgnored(el, 'dc022')) return;
+        seen.add(el);
+        var where = stuck ? '任何滚动位置' : (at === 'top' ? '滚到顶' : '滚到底');
+        found.push({
+          rule: 'DC022',
+          selector: shortSelector(segOf, el),
+          rect: { x: round1(r.x), y: round1(r.y), width: round1(r.width), height: round1(r.height) },
+          value: {
+            at: stuck ? 'any' : at,
+            coveredBy: shortSelector(segOf, bar),
+            scroller: sc === docScroller ? 'document' : shortSelector(segOf, sc)
+          },
+          message: where + '时内容中心被固定栏 ' + shortSelector(segOf, bar) + ' 盖住，而且这个方向已经滚不动，' +
+            '用户看不到也点不到它。复核：给滚动区留出与栏等高的内边距或占位元素，或让栏进入文档流占据空间；' +
+            'scroll-padding 不增加可滚动范围，解决不了。'
+        });
+      });
+    }
+
+    /* 记下会被改动的滚动位置：各滚动容器及其祖先（scrollIntoView 会连带滚动祖先）。 */
+    var saved = [];
+    var savedSet = new Set();
+    scrollers.forEach(function (sc) {
+      for (var n = sc; n && n.nodeType === 1; n = n.parentElement) {
+        if (savedSet.has(n)) continue;
+        savedSet.add(n);
+        saved.push([n, n.scrollTop, n.scrollLeft]);
+      }
+    });
+    function restore() {
+      saved.forEach(function (p) { p[0].scrollTop = p[1]; p[0].scrollLeft = p[2]; });
+    }
+
+    var chain = Promise.resolve();
+    scrollers.forEach(function (sc, si) {
+      if (!groups[si].length) return;
+      var max = sc.scrollHeight - sc.clientHeight;
+      ['top', 'bottom'].forEach(function (at) {
+        chain = chain.then(function () {
+          sc.scrollTop = at === 'top' ? 0 : max;
+          /* 内部容器可能在首屏之外：滚进视口再看。放得下就居中，避开页面级的顶栏底栏；放不下按要看的那一端对齐。 */
+          if (sc !== docScroller) {
+            var fits = sc.getBoundingClientRect().height <= win.innerHeight * 0.8;
+            sc.scrollIntoView({ block: fits ? 'center' : (at === 'top' ? 'start' : 'end'), inline: 'nearest' });
+          }
+          return nextFrames(win);
+        }).then(function () {
+          check(sc, at, max <= 1, groups[si]);
+        });
+      });
+      chain = chain.then(restore);
+    });
+    return chain.then(restore).then(function () { return nextFrames(win); }).then(function () { return found; });
+  }
+
+  /* ------------------------------------------------------------------ */
   /* 入口                                                                */
   /* ------------------------------------------------------------------ */
 
@@ -1499,4 +1665,5 @@
   globalThis.denseAuditEvaluate = evaluate;
   globalThis.denseAuditColors = function (opts) { return collectColors(window, document, opts); };
   globalThis.denseAuditThemeDiff = themeDiff;
+  globalThis.denseAuditScroll = function (opts) { return scrollCover(window, document, opts); };
 })();
