@@ -5,7 +5,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import {
-  addFindings, browserCandidates, browserMissingMessage, checkSteps, findBrowser, screenshotName,
+  addFindings, browserCandidates, browserMissingMessage, checkSteps, findBrowser, parseAttach, screenshotName,
 } from '../scripts/run-audit.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -115,4 +115,16 @@ test('CLI：找不到浏览器时退出码 2，stderr 写原因与恢复办法�
   assert.match(r.stderr, /未找到 Chromium 内核浏览器/);
   assert.match(r.stderr, /CHROME_PATH 指向的文件不存在/);
   assert.match(r.stderr, /CHROME_PATH 设为浏览器可执行文件的完整路径/);
+});
+
+test('parseAttach：端口、host:端口、http 地址都规范成 http://host:端口，非本机地址或格式不对时报错', () => {
+  assert.equal(parseAttach('9222'), 'http://127.0.0.1:9222');
+  assert.equal(parseAttach('localhost:9333'), 'http://localhost:9333');
+  assert.equal(parseAttach('http://127.0.0.1:9222/'), 'http://127.0.0.1:9222');
+  assert.equal(parseAttach('http://[::1]:9222'), 'http://[::1]:9222');
+  assert.throws(() => parseAttach('http://192.168.1.2:9222'), /只接入本机的调试端口/);
+  assert.throws(() => parseAttach('example.com:9222'), /只接入本机的调试端口/);
+  for (const bad of ['', 'abc', 'http://127.0.0.1', 'ws://127.0.0.1:9222', 'http://127.0.0.1:9222/json/list']) {
+    assert.throws(() => parseAttach(bad), /--attach 需要调试端口/, bad);
+  }
 });

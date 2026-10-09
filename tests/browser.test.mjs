@@ -7,7 +7,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { findBrowser, runAudit, runAudits } from '../scripts/run-audit.mjs';
+import { pathToFileURL } from 'node:url';
+import { findBrowser, killBrowser, launchBrowser, runAudit, runAudits } from '../scripts/run-audit.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const cli = path.join(here, '..', 'scripts', 'run-audit.mjs');
@@ -518,5 +519,101 @@ test('真实浏览器：--screenshot 每份报告量取前存一张当前视口�
     const missing = runCli([fixture('clean.html'), '--screenshot']);
     assert.equal(missing.status, 2);
     assert.match(missing.stderr, /参数 --screenshot 缺少值/);
+  });
+});
+
+// 在页面里执行一段表达式并取值：测试用来模拟「用户已经在用的应用」，不经过 run-audit 的 CDP 客户端。
+async function evalIn(wsUrl, expression) {
+  const ws = new WebSocket(wsUrl);
+  await new Promise((resolve, reject) => {
+    ws.addEventListener('open', resolve, { once: true });
+    ws.addEventListener('error', reject, { once: true });
+  });
+  const reply = new Promise((resolve) => ws.addEventListener('message', (e) => resolve(JSON.parse(String(e.data))), { once: true }));
+  ws.send(JSON.stringify({ id: 1, method: 'Runtime.evaluate', params: { expression, returnByValue: true, awaitPromise: true } }));
+  const msg = await reply;
+  ws.close();
+  return msg.result.result.value;
+}
+
+test('真实浏览器：--attach 接入已打开的页面，不重载、不关浏览器', { timeout: STEP_TIMEOUT * 3 }, async (t) => {
+  const bin = findBrowser();
+  if (!bin) {
+    t.skip(SKIP_REASON);
+    return;
+  }
+  // 自己起一个浏览器当作「运行中的应用」：一个 about:blank，再开一个 steps-app 页面。
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dense-attach-'));
+  const { child, port } = await launchBrowser(bin, dir, 1000, 700);
+  t.after(async () => {
+    await killBrowser(child);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+  const base = `http://127.0.0.1:${port}`;
+  const list = async () => (await fetch(`${base}/json/list`)).json();
+  const app = await (await fetch(`${base}/json/new?${pathToFileURL(fixture('steps-app.html')).href}`, { method: 'PUT' })).json();
+  await evalIn(app.webSocketDebuggerUrl, `new Promise((r) => document.readyState === 'complete' ? r() : addEventListener('load', r))`);
+  await evalIn(app.webSocketDebuggerUrl, 'window.__attachMarker = 42');
+  const before = await evalIn(app.webSocketDebuggerUrl, '({ origin: performance.timeOrigin, w: innerWidth, h: innerHeight })');
+  const intact = async () => {
+    assert.equal(child.exitCode, null, '浏览器进程不应被关掉');
+    assert.equal((await list()).filter((x) => x.id === app.id).length, 1, '页面应当还在');
+    const now = await evalIn(app.webSocketDebuggerUrl, '({ origin: performance.timeOrigin, marker: window.__attachMarker })');
+    assert.deepEqual(now, { origin: before.origin, marker: 42 }, '页面不应被重载');
+  };
+
+  await t.test('有两个页面时要求 --attach-target，并列出可选页面；片段不匹配也说清楚', async () => {
+    await assert.rejects(runAudit({ attach: String(port) }), /有 2 个页面.*--attach-target.*steps-app\.html/s);
+    await assert.rejects(runAudit({ attach: String(port), attachTarget: '不存在的页面' }), /没有 URL 或标题含「不存在的页面」的页面；可选：/);
+    await intact();
+  });
+
+  await t.test('按标题片段选中页面：量窗口实际尺寸，带截图，context.attached 记接入信息', async () => {
+    const shots = path.join(dir, 'shots');
+    const { report } = await runAudit({ attach: `http://127.0.0.1:${port}`, attachTarget: '交互步骤样例', screenshot: shots });
+    assert.deepEqual(report.context.viewport, { width: before.w, height: before.h });
+    assert.equal(report.context.attached.endpoint, base);
+    assert.match(report.context.attached.url, /steps-app\.html$/);
+    assert.equal(report.context.attached.title, '交互步骤样例');
+    assert.equal(report.context.screenshot, path.join(shots, `01-${before.w}x${before.h}.png`));
+    assert.ok(fs.statSync(report.context.screenshot).size > 0);
+    await intact();
+  });
+
+  await t.test('只剩一个页面时直接接入；--steps 在当前页面上操作并量取，不重新加载', async () => {
+    const blank = (await list()).find((x) => x.type === 'page' && x.id !== app.id);
+    await fetch(`${base}/json/close/${blank.id}`);
+    const { runs } = await runAudits({
+      attach: String(port), steps: [{ click: '#open' }, { expect: '#panel' }, { audit: '面板展开' }],
+    });
+    assert.deepEqual(runs.map((r) => r.report.context.state), ['面板展开']);
+    assert.deepEqual(runs[0].report.findings.filter((f) => f.rule === 'DC023'), []);
+    assert.equal(await evalIn(app.webSocketDebuggerUrl, '!!document.querySelector("#panel") && getComputedStyle(document.querySelector("#panel")).display !== "none"'), true);
+    await intact();
+  });
+
+  await t.test('CLI：--attach 出报告；与 URL、视口、配色参数同用，或连不上端口时退出码 2', async () => {
+    const ok = runCli(['--attach', String(port)]);
+    assert.ok(ok.status === 0 || ok.status === 1, ok.stderr);
+    assert.match(JSON.parse(ok.stdout).context.attached.url, /steps-app\.html$/);
+    await intact();
+    for (const args of [[fixture('clean.html')], ['--viewport', '390x844'], ['--width', '390'], ['--color-scheme', 'dark']]) {
+      const bad = runCli(['--attach', String(port), ...args]);
+      assert.equal(bad.status, 2, args.join(' '));
+    }
+    const remote = runCli(['--attach', 'http://192.168.1.2:9222']);
+    assert.equal(remote.status, 2);
+    assert.match(remote.stderr, /只接入本机的调试端口/);
+    const orphan = runCli([fixture('clean.html'), '--attach-target', 'x']);
+    assert.equal(orphan.status, 2);
+    assert.match(orphan.stderr, /--attach-target 要和 --attach 一起用/);
+    // 找一个刚释放、没人监听的端口。
+    const net = await import('node:net');
+    const free = await new Promise((resolve) => {
+      const srv = net.createServer().listen(0, '127.0.0.1', () => { const p = srv.address().port; srv.close(() => resolve(p)); });
+    });
+    const refused = runCli(['--attach', String(free)]);
+    assert.equal(refused.status, 2);
+    assert.match(refused.stderr, /连不上调试端口.*remote-debugging-port.*WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS/s);
   });
 });

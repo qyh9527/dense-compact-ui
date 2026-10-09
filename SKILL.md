@@ -89,7 +89,7 @@ description: 紧凑高信息密度界面的设计、实现与评审指导：高�
 
 ## 5. 交付前检查
 
-按 quality-workflow.md 的验收档位确定检查范围，用真实内容过 [verify.md](references/verify.md) 的相关项；非 Web 平台按 context.md 选验证工具。Web 页面能在浏览器里打开时，用 [audit-script.md](references/audit-script.md) 采集量取与截图证据。有预览时按 quality-workflow.md 的「复验与停止」集中检查、批量修复，并在停止前做观感检查。交付时贴出检查结果，每项标「预览验证 / 静态检查 / 未验证」，未覆盖项写明原因；没贴出结果，不算完成。
+按 quality-workflow.md 的验收档位确定检查范围，用真实内容过 [verify.md](references/verify.md) 的相关项；非 Web 平台按 context.md 选验证工具。Web 页面能在浏览器里打开，或 Electron / Tauri 应用开着调试端口时，用 [audit-script.md](references/audit-script.md) 采集量取与截图证据。有预览时按 quality-workflow.md 的「复验与停止」集中检查、批量修复，并在停止前做观感检查。交付时贴出检查结果，每项标「预览验证 / 静态检查 / 未验证」，未覆盖项写明原因；没贴出结果，不算完成。
 
 ## 6. 交付
 
