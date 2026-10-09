@@ -89,6 +89,8 @@
   var VIEWPORT_TAGS = { html: 1, body: 1 };
   /* 让对齐、间距、方向类属性生效的 display（DC019）。 */
   var FLEX_GRID = { flex: 1, 'inline-flex': 1, grid: 1, 'inline-grid': 1 };
+  /* 内部布局自带对齐的控件，浏览器默认样式就有 align-items 等（如 select 的 center），DC019 不看。 */
+  var CONTROL_TAGS = { select: 1, button: 1, input: 1, textarea: 1, meter: 1, progress: 1, option: 1, optgroup: 1 };
   /* Unicode 私有区字符：图标字体常把图标放在这里（DC020）。含 U+E000–U+F8FF 与补充私有区 A / B。 */
   var PUA = /[\uE000-\uF8FF]|[\uDB80-\uDBFF][\uDC00-\uDFFF]/;
 
@@ -527,7 +529,7 @@
     }
 
     /* 写了只对 flex / grid（gap 与 justify-content 还有多列）生效的属性，但 display 不是它们。只记非默认值；
-     * 按钮等控件的 UA 默认 align-items: flex-start 属于默认值，不记。 */
+     * 表单控件（CONTROL_TAGS）内部布局会用到这些属性，不记。 */
     function deadLayoutOf(cs) {
       var d = cs.display;
       if (FLEX_GRID[d] || d === 'none' || d === 'contents') return null;
@@ -705,7 +707,7 @@
           return parsePx(cs['border' + side + 'Width']) > 0 && cs['border' + side + 'Style'] !== 'none';
         });
         rec.shadow = !!cs.boxShadow && cs.boxShadow !== 'none';
-        rec.deadLayout = deadLayoutOf(cs);
+        rec.deadLayout = CONTROL_TAGS[tag] ? null : deadLayoutOf(cs);
         iconOf(el, cs, rec);
 
         rec.inter = el.matches(INTERACTIVE_SELECTOR);

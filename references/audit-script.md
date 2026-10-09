@@ -17,7 +17,19 @@ node <技能目录>/scripts/run-audit.mjs http://localhost:5173/nodes --touch --
 - 页面加载后默认等 DOM 连续 500ms 不变再采集（最多 10 秒，`--settle <毫秒>` 调整，0 关闭），然后等网页字体加载结束（最多 5 秒）。数据靠接口或异步组件晚到的页面，用 `--wait-for <选择器>` 指定代表真实内容已渲染的元素，比如表格首行；只靠静默等待可能量到加载壳。报告的 `context.ready` 记录实际等待：`settled: false` 表示传了 `--settle 0` 跳过，或等满 10 秒页面仍在变化，后者要检查页面是否有持续动画或轮询。
 - `--touch`：输入含触屏时加，才检查 44px 热区；不加时按页面的 `pointer: coarse` 判断。
 - 退出码 0 无告警、1 有告警、2 浏览器或页面出错（原因在 stderr）。找不到浏览器时设 `CHROME_PATH`。
-- 每个要验收的状态（默认、展开、错误、窄屏）各跑一次，和截图一起记录。需要登录或先操作到某个状态的页面，CLI 到不了时改用下一种方式。
+- 每个要验收的状态（默认、展开、错误、窄屏）各跑一次，和截图一起记录。要先操作才能到达的状态，用 `--steps` 写步骤文件；需要登录等 CLI 到不了的状态，改用下一种方式。
+- `--steps steps.json`：加载后按顺序执行步骤，每步写一个动作——`click`、`hover`（选择器）、`fill`（选择器 + `value`）、`press`（Enter、Escape、Tab、方向键等或单个字符）、`select`（选择器 + 选项的 `value` 或文字）、`wait`（等选择器可见，默认 5 秒）、`expect`（选择器，可加 `count`、`text`、`visible: false`，默认等 2 秒）；`timeout` 可改等待毫秒数。在 `{ "audit": "状态名" }` 处各量一次，没写就在最后量一次；某一步找不到元素或期望落空时记 DC023、在该处量一次并停下。输出同多视口格式，`context.state` 是状态名。只执行文件里写的动作；提交、删除、发送这类步骤只对模拟数据或沙箱环境跑。
+
+```json
+[
+  { "click": "#filters .apply" },
+  { "expect": "table tbody tr", "count": 20 },
+  { "audit": "筛选后" },
+  { "fill": "#search", "value": "订单 B" },
+  { "press": "Enter" },
+  { "expect": "#result", "text": "订单 B" }
+]
+```
 
 已经用 Playwright、DevTools 或 tauri-pilot 打开并操作到目标状态时，先 `await document.fonts.ready`，再在该页面里注入脚本全文后执行 `denseAudit({ touch: true, root: 'main' })`，参数含义同上，节点超过 20000 会要求缩小 `root`。
 
@@ -38,10 +50,11 @@ node <技能目录>/scripts/run-audit.mjs http://localhost:5173/nodes --touch --
 | DC016 | 点击被拦截：可交互元素中心点命中了别的元素，或自己的 computed `pointer-events` 是 none；对话框、菜单、listbox、popover 盖住它们外面的控件不算，浮层里的控件被浮层内另一层盖住照常报 | 遮挡层是否该 `pointer-events: none`，层级或定位是否写错；暂时不可用的控件改用 `disabled` / `aria-disabled` |
 | DC017 | 字体回退：页面在用的第一字体族，其 `@font-face` 文件全部加载失败；按字体族合并成一条 | `src` 路径、跨域与格式；computed `font-family` 不能证明字体生效 |
 | DC018 | 破图：`img` 请求已结束却没有像素，按地址合并（报告里去掉查询串）；塌成 0×0 的也算，懒加载还没触发的不算 | 资源路径、跨域与响应格式；页面加载后才插入的图片要等它请求结束再量 |
-| DC019 | 布局属性没生效：写了 `gap`、`align-items`、`justify-content`、`flex-direction`、`grid-template-*` 等非默认值，但当前 `display` 不是 flex / grid（多列布局的 `column-gap`、`justify-content` 除外） | 是否被别的规则或断点改掉了 `display`；有意在这个视口换布局时删掉这些属性 |
+| DC019 | 布局属性没生效：写了 `gap`、`align-items`、`justify-content`、`flex-direction`、`grid-template-*` 等非默认值，但当前 `display` 不是 flex / grid（多列布局的 `column-gap`、`justify-content`，以及 select、button、input 等表单控件除外） | 是否被别的规则或断点改掉了 `display`；有意在这个视口换布局时删掉这些属性 |
 | DC020 | 图标字体丢失：直接文字或 `::before` / `::after` 里的私有区字符，所用字体族加载失败；按字体族合并 | 图标字体的 `@font-face` 路径；用连字写的图标（如 `home`）回退后显示成单词，归 DC017 |
 | DC021 | 主题残色（只在 `--color-scheme` 给了两种时）：中性色区域两种配色下背景相同，成了和页面底色深浅相反的局部反色（只报最外层）；或某种配色下文字对比度不足，而文字色或背景色两次完全相同 | 换成主题 token；有意固定颜色的代码块、品牌区用 `data-dc-ignore` 写理由。用按钮或类名切主题的页面，在两种主题下各执行一次 `denseAuditColors()`，再用 `denseAuditThemeDiff(前, 后, { scheme })` 比较 |
 | DC022 | 滚动遮挡（只在 `--scroll` 时）：滚到顶时被上方固定 / 粘性栏盖住、滚到底时被下方的栏盖住的内容中心，这个方向已经滚不动，用户永远看不到；容器滚不动时两头都算。DC016 已报的元素不重复报 | 滚动区留出与栏等高的内边距或占位元素，或让栏进入文档流；`scroll-padding` 不增加可滚动范围，解决不了。滚动途中暂时压住内容不算 |
+| DC023 | 交互步骤没达成（只在 `--steps` 时）：元素找不到或不可见、选项不存在、`wait` 超时、`expect` 的数量或文字不符；`value` 里有步骤号、动作、期望与实际 | 操作是否真的生效（被遮挡、事件没绑定、请求失败），还是步骤里的选择器或期望写错了 |
 
 `metrics` 是交付时要写出的数字：`lists` 给每个重复对象视图的项数、折叠态行高中位数和一屏完整可见项数；`accentRatio` 是强调色面积占比；`fontSizes`、`radii` 是刻度直方图；`page` 记录文档宽与视口宽、加载失败和仍在加载的字体族。改版时用同一内容、视口和状态跑前后两次对比。
 

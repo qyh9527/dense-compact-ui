@@ -1,0 +1,15 @@
+[
+  {
+    "audit": "初始"
+  },
+  {
+    "click": "#dead"
+  },
+  {
+    "expect": "#panel",
+    "timeout": 500
+  },
+  {
+    "audit": "不该执行"
+  }
+]
