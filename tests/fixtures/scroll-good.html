@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>滚动遮挡好例</title>
+<style>
+/* 与 scroll-bad.html 对应的合法写法：内容区留出与固定栏等高的内边距；
+ * 内部滚动区的吸顶表头只在滚动途中压住内容；角落的悬浮按钮不压住内容中心。DC022 都不应告警。 */
+body {
+  margin: 0;
+  color: #1f2328;
+  background: #ffffff;
+  font: 13px/1.5 system-ui, sans-serif;
+}
+h1 {
+  margin: 0;
+  padding: 12px;
+  font-size: 16px;
+}
+.topbar,
+.bottombar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  height: 48px;
+  padding: 0 12px;
+  background: #f6f8fa;
+}
+.topbar {
+  top: 0;
+  border-bottom: 1px solid #d0d7de;
+}
+.bottombar {
+  bottom: 0;
+  border-top: 1px solid #d0d7de;
+}
+.row {
+  height: 24px;
+  padding: 0 12px;
+  border-bottom: 1px solid #d0d7de;
+}
+body {
+  padding: 48px 0;
+}
+.pane {
+  height: 160px;
+  margin: 12px;
+  overflow: auto;
+  border: 1px solid #d0d7de;
+}
+.pane-head {
+  position: sticky;
+  top: 0;
+  height: 24px;
+  padding: 0 12px;
+  background: #f6f8fa;
+  border-bottom: 1px solid #d0d7de;
+}
+.to-top {
+  position: fixed;
+  right: 12px;
+  bottom: 60px;
+  height: 28px;
+  font: inherit;
+}
+</style>
+</head>
+<body>
+<header class="topbar"><span>顶栏</span></header>
+<h1>订单列表</h1>
+<div class="pane">
+  <div class="pane-head">内部列表表头</div>
+  <div class="row">内部第 1 行</div>
+  <div class="row">内部第 2 行</div>
+  <div class="row">内部第 3 行</div>
+  <div class="row">内部第 4 行</div>
+  <div class="row">内部第 5 行</div>
+  <div class="row">内部第 6 行</div>
+  <div class="row">内部第 7 行</div>
+  <div class="row">内部第 8 行</div>
+  <div class="row">内部第 9 行</div>
+  <div class="row">内部第 10 行</div>
+  <div class="row">内部第 11 行</div>
+  <div class="row">内部第 12 行</div>
+  <div class="row">内部第 13 行</div>
+  <div class="row">内部第 14 行</div>
+  <div class="row">内部第 15 行</div>
+  <div class="row">内部第 16 行</div>
+  <div class="row">内部第 17 行</div>
+  <div class="row">内部第 18 行</div>
+  <div class="row">内部第 19 行</div>
+  <div class="row">内部第 20 行</div>
+</div>
+<div class="list">
+  <div class="row">第 1 行</div>
+  <div class="row">第 2 行</div>
+  <div class="row">第 3 行</div>
+  <div class="row">第 4 行</div>
+  <div class="row">第 5 行</div>
+  <div class="row">第 6 行</div>
+  <div class="row">第 7 行</div>
+  <div class="row">第 8 行</div>
+  <div class="row">第 9 行</div>
+  <div class="row">第 10 行</div>
+  <div class="row">第 11 行</div>
+  <div class="row">第 12 行</div>
+  <div class="row">第 13 行</div>
+  <div class="row">第 14 行</div>
+  <div class="row">第 15 行</div>
+  <div class="row">第 16 行</div>
+  <div class="row">第 17 行</div>
+  <div class="row">第 18 行</div>
+  <div class="row">第 19 行</div>
+  <div class="row">第 20 行</div>
+  <div class="row">第 21 行</div>
+  <div class="row">第 22 行</div>
+  <div class="row">第 23 行</div>
+  <div class="row">第 24 行</div>
+  <div class="row">第 25 行</div>
+  <div class="row">第 26 行</div>
+  <div class="row">第 27 行</div>
+  <div class="row">第 28 行</div>
+  <div class="row">第 29 行</div>
+  <div class="row">第 30 行</div>
+  <div class="row">第 31 行</div>
+  <div class="row">第 32 行</div>
+  <div class="row">第 33 行</div>
+  <div class="row">第 34 行</div>
+  <div class="row">第 35 行</div>
+  <div class="row">第 36 行</div>
+  <div class="row">第 37 行</div>
+  <div class="row">第 38 行</div>
+  <div class="row">第 39 行</div>
+  <div class="row">第 40 行</div>
+  <div class="row">第 41 行</div>
+  <div class="row">第 42 行</div>
+  <div class="row">第 43 行</div>
+  <div class="row">第 44 行</div>
+  <div class="row">第 45 行</div>
+  <div class="row">第 46 行</div>
+  <div class="row">第 47 行</div>
+  <div class="row">第 48 行</div>
+  <div class="row">第 49 行</div>
+  <div class="row">第 50 行</div>
+  <div class="row">第 51 行</div>
+  <div class="row">第 52 行</div>
+  <div class="row">第 53 行</div>
+  <div class="row">第 54 行</div>
+  <div class="row">第 55 行</div>
+  <div class="row">第 56 行</div>
+  <div class="row">第 57 行</div>
+  <div class="row">第 58 行</div>
+  <div class="row">第 59 行</div>
+  <div class="row">第 60 行</div>
+  <div class="row">最后一行</div>
+</div>
+<button class="to-top" type="button">回到顶部</button>
+<footer class="bottombar"><button type="button">保存</button></footer>
+</body>
+</html>

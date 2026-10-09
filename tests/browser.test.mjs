@@ -326,3 +326,40 @@ test('真实浏览器：--color-scheme 深浅两种配色下的主题残色 DC02
     assert.match(bad.stderr, /--color-scheme/);
   });
 });
+
+test('真实浏览器：--scroll 滚到顶 / 底时被固定栏永久盖住的内容 DC022', { timeout: STEP_TIMEOUT * 2 }, async (t) => {
+  if (!findBrowser()) {
+    t.skip(SKIP_REASON);
+    return;
+  }
+
+  await t.test('scroll-bad.html：顶部标题在滚到顶时、最后两行在滚到底时被盖住；不开 --scroll 时不检查', async () => {
+    const plain = (await runAudit({ target: fixture('scroll-bad.html') })).report;
+    assert.equal(plain.findings.filter((f) => f.rule === 'DC022').length, 0);
+    assert.equal(plain.context.scrollChecked, undefined);
+
+    const { report, htmlLengthBefore, htmlLengthAfter } = await runAudit({ target: fixture('scroll-bad.html'), scroll: true });
+    const hits = report.findings.filter((f) => f.rule === 'DC022');
+    t.diagnostic(`scroll-bad：${JSON.stringify(hits.map((f) => [f.selector, f.value]))}`);
+    assert.equal(report.context.scrollChecked, true);
+    const by = (sel) => hits.find((f) => f.selector === sel);
+    assert.deepEqual(by('#first-title').value, { at: 'top', coveredBy: 'html > body > header', scroller: 'document' });
+    assert.deepEqual(by('#last-row').value, { at: 'bottom', coveredBy: 'html > body > footer', scroller: 'document' });
+    assert.ok(hits.every((f) => f.value.scroller === 'document'));
+    assert.equal(report.totalFindings, report.findings.length);
+    assert.equal(htmlLengthAfter, htmlLengthBefore, '滚动检查不得改动 DOM');
+  });
+
+  await t.test('scroll-good.html：留了内边距、内部吸顶表头、角落悬浮按钮都不告警', async () => {
+    const { report } = await runAudit({ target: fixture('scroll-good.html'), scroll: true });
+    assert.deepEqual(report.findings, [], JSON.stringify(report.findings, null, 2));
+  });
+
+  await t.test('CLI：--scroll 生效，有告警时退出码 1', () => {
+    const result = runCli([fixture('scroll-bad.html'), '--scroll']);
+    assert.equal(result.status, 1, `退出码应为 1，stderr：${result.stderr}`);
+    const report = JSON.parse(result.stdout);
+    assert.equal(report.schema, 'dense-audit-v1');
+    assert.ok(report.findings.some((f) => f.rule === 'DC022' && f.selector === '#last-row'));
+  });
+});

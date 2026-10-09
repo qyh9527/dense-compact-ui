@@ -12,6 +12,7 @@ node <技能目录>/scripts/run-audit.mjs http://localhost:5173/nodes --touch --
 
 - 目标可以是 URL 或本地 HTML 路径；`--width` / `--height` 设视口，默认 1280×720；`--root <选择器>` 只查一个区域。
 - 多个视口用可重复的 `--viewport 宽x高` 代替 `--width` / `--height`，如 `--viewport 1280x720 --viewport 390x844`：同一个浏览器里逐个视口重新加载后采集，输出 `{ schema: "dense-audit-multi-v1", totalFindings, reports }`，`reports` 里每个视口一份普通报告。不传时输出格式不变。
+- 有固定顶栏、底栏或吸顶区域时加 `--scroll`：量取后把文档和面积最大的几个滚动容器各滚到顶、滚到底，内容被固定栏永久盖住的记为 DC022，检查完恢复原来的滚动位置。滚动可能触发懒加载或无限滚动请求，只在能接受这些请求的环境里用。
 - 页面跟随系统深浅色偏好（`prefers-color-scheme`）时，加 `--color-scheme light,dark`：每种配色各加载一次，输出同多视口格式，`context.colorScheme` 标明配色；两种都给时互相比较，颜色写死没跟主题变的记为 DC021。可与 `--viewport` 一起用。
 - 页面加载后默认等 DOM 连续 500ms 不变再采集（最多 10 秒，`--settle <毫秒>` 调整，0 关闭），然后等网页字体加载结束（最多 5 秒）。数据靠接口或异步组件晚到的页面，用 `--wait-for <选择器>` 指定代表真实内容已渲染的元素，比如表格首行；只靠静默等待可能量到加载壳。报告的 `context.ready` 记录实际等待：`settled: false` 表示传了 `--settle 0` 跳过，或等满 10 秒页面仍在变化，后者要检查页面是否有持续动画或轮询。
 - `--touch`：输入含触屏时加，才检查 44px 热区；不加时按页面的 `pointer: coarse` 判断。
@@ -40,6 +41,7 @@ node <技能目录>/scripts/run-audit.mjs http://localhost:5173/nodes --touch --
 | DC019 | 布局属性没生效：写了 `gap`、`align-items`、`justify-content`、`flex-direction`、`grid-template-*` 等非默认值，但当前 `display` 不是 flex / grid（多列布局的 `column-gap`、`justify-content` 除外） | 是否被别的规则或断点改掉了 `display`；有意在这个视口换布局时删掉这些属性 |
 | DC020 | 图标字体丢失：直接文字或 `::before` / `::after` 里的私有区字符，所用字体族加载失败；按字体族合并 | 图标字体的 `@font-face` 路径；用连字写的图标（如 `home`）回退后显示成单词，归 DC017 |
 | DC021 | 主题残色（只在 `--color-scheme` 给了两种时）：中性色区域两种配色下背景相同，成了和页面底色深浅相反的局部反色（只报最外层）；或某种配色下文字对比度不足，而文字色或背景色两次完全相同 | 换成主题 token；有意固定颜色的代码块、品牌区用 `data-dc-ignore` 写理由。用按钮或类名切主题的页面，在两种主题下各执行一次 `denseAuditColors()`，再用 `denseAuditThemeDiff(前, 后, { scheme })` 比较 |
+| DC022 | 滚动遮挡（只在 `--scroll` 时）：滚到顶时被上方固定 / 粘性栏盖住、滚到底时被下方的栏盖住的内容中心，这个方向已经滚不动，用户永远看不到；容器滚不动时两头都算。DC016 已报的元素不重复报 | 滚动区留出与栏等高的内边距或 `scroll-padding`，或让栏占据布局空间；滚动途中暂时压住内容不算 |
 
 `metrics` 是交付时要写出的数字：`lists` 给每个重复对象视图的项数、折叠态行高中位数和一屏完整可见项数；`accentRatio` 是强调色面积占比；`fontSizes`、`radii` 是刻度直方图；`page` 记录文档宽与视口宽、加载失败和仍在加载的字体族。改版时用同一内容、视口和状态跑前后两次对比。
 

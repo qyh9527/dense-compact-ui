@@ -8,6 +8,7 @@
 //                              [--width 1280 --height 720] [--out report.json]
 //   多视口：用可重复的 --viewport 宽x高 代替 --width / --height，同一个浏览器里逐个视口重载并审计，
 //   输出 { schema: 'dense-audit-multi-v1', totalFindings, reports: [每个视口一份 dense-audit-v1] }。
+// --scroll：量取后把文档和主要滚动容器各滚到顶、滚到底，内容被固定栏永久盖住的报 DC022，最后恢复滚动位置。
 // --color-scheme light,dark：按系统深浅色偏好（prefers-color-scheme）各加载一次；给了两种时互相比较，
 //   颜色写死没跟主题变的报 DC021，记在出问题的那种配色的报告里。输出同多视口格式。
 // --wait-for：load 之后等该选择器存在且可见（上限 60 秒，超时按出错处理）。
@@ -306,12 +307,13 @@ function loadThemeDiff(source) {
 /**
  * 同一个浏览器里按 viewports 顺序逐个视口审计：每个视口先切尺寸，再重新加载页面并等就绪，
  * 量到的是在该尺寸下首次布局的结果。返回 { runs: [{ report, htmlLengthBefore, htmlLengthAfter }] }。
+ * scroll：量取后检查滚到顶 / 底时被固定栏永久盖住的内容（DC022）；DC016 已报的元素不重复报。
  * colorSchemes（如 ['light', 'dark']）：每个视口按每种 prefers-color-scheme 各加载一次，runs 按视口、配色顺序排列；
  * 给了两种以上时两两比较颜色快照，DC021 记在出问题的那种配色的报告里。
  * 其余参数与 runAudit 相同。
  */
 export async function runAudits({
-  target, touch = false, root, viewports, colorSchemes,
+  target, touch = false, root, viewports, colorSchemes, scroll = false,
   waitFor, settle = DEFAULT_SETTLE, waitTimeoutMs = STEP_TIMEOUT,
 } = {}) {
   if (!target) throw new Error('缺少要检查的页面：请给 URL 或本地 html 路径');
@@ -399,8 +401,14 @@ export async function runAudits({
         await cdp.evaluate(scriptSource);
         const options = { touch: touch ? true : undefined, root: root || undefined };
         const json = await cdp.evaluate(`JSON.stringify(denseAudit(${JSON.stringify(options)}))`);
-        const htmlLengthAfter = await cdp.evaluate('document.documentElement.outerHTML.length');
         const report = JSON.parse(json);
+        if (scroll) {
+          const scrollOptions = JSON.stringify({ root: root || undefined });
+          const covered = JSON.parse(await cdp.evaluate(`denseAuditScroll(${scrollOptions}).then(JSON.stringify)`, { awaitPromise: true }));
+          addFindings(report, covered.filter((f) => !report.findings.some((g) => g.rule === 'DC016' && g.selector === f.selector)));
+          report.context.scrollChecked = true;
+        }
+        const htmlLengthAfter = await cdp.evaluate('document.documentElement.outerHTML.length');
         report.context.ready = ready;
         if (scheme) report.context.colorScheme = scheme;
         const run = { report, htmlLengthBefore, htmlLengthAfter };
@@ -452,6 +460,7 @@ function parseArgs(argv) {
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--touch') opts.touch = true;
+    else if (a === '--scroll') opts.scroll = true;
     else if (a === '--root') opts.root = needValue(a, i++);
     else if (a === '--out') opts.out = needValue(a, i++);
     else if (a === '--wait-for') opts.waitFor = needValue(a, i++);
@@ -473,7 +482,7 @@ function parseArgs(argv) {
     } else if (a.startsWith('--')) throw new Error(`未知参数：${a}`);
     else rest.push(a);
   }
-  if (rest.length !== 1) throw new Error('用法：node scripts/run-audit.mjs <URL 或本地 html 路径> [--touch] [--root <选择器>] [--wait-for <选择器>] [--settle 500] [--width 1280 --height 720 | --viewport 1280x720 --viewport 390x844 …] [--color-scheme light,dark] [--out report.json]');
+  if (rest.length !== 1) throw new Error('用法：node scripts/run-audit.mjs <URL 或本地 html 路径> [--touch] [--root <选择器>] [--wait-for <选择器>] [--settle 500] [--scroll] [--width 1280 --height 720 | --viewport 1280x720 --viewport 390x844 …] [--color-scheme light,dark] [--out report.json]');
   if (viewports.length && (opts.width || opts.height)) throw new Error('--viewport 不能和 --width / --height 同时使用');
   if (viewports.length) opts.viewports = viewports;
   if (schemes.length) opts.colorSchemes = schemes;
