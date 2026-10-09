@@ -5,10 +5,14 @@
 <title>运行时探针坏例</title>
 <link rel="stylesheet" href="../../assets/tokens.css">
 <style>
-/* DC014–DC017 的坏例，每个区块注明要触发的规则；对应的合法写法在 runtime-good.html。 */
+/* DC014–DC020 的坏例，每个区块注明要触发的规则；对应的合法写法在 runtime-good.html。 */
 @font-face {
   font-family: "Missing Brand";
   src: url("./no-such-font.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Missing Icons";
+  src: url("./no-such-icons.woff2") format("woff2");
 }
 html.dc-workbench {
   background: var(--dc-canvas);
@@ -72,6 +76,27 @@ dialog.dlg {
   pointer-events: none;
 }
 
+/* DC018：同一张不存在的图片用了三次（一次带查询串，报告里合并且不带出查询串），其中一次没写尺寸、塌成 0×0。 */
+.thumbs img {
+  vertical-align: top;
+}
+
+/* DC019：断点或后来的规则把 display 改回 block，gap 与 align-items 不再生效。 */
+.toolbar {
+  display: flex;
+  gap: var(--dc-space-4);
+  align-items: center;
+}
+.toolbar.collapsed {
+  display: block;
+}
+
+/* DC020：图标字体文件不存在，::before 里的私有区字符显示成方块。 */
+.icon::before {
+  font-family: "Missing Icons";
+  content: "\e900";
+}
+
 /* DC017：品牌字体文件不存在，实际回退到后备字体。 */
 .brand {
   font-family: "Missing Brand", var(--dc-font-sans);
@@ -94,6 +119,13 @@ dialog.dlg {
     </div>
   </dialog>
   <button id="no-pointer" class="no-pointer" type="button">点击会穿透的按钮</button>
+  <div class="thumbs">
+    <img id="broken-1" src="./no-such-image.png" alt="缺失的缩略图一" width="48" height="48">
+    <img src="./no-such-image.png?token=secret" alt="缺失的缩略图二" width="48" height="48">
+    <img src="./no-such-image.png">
+  </div>
+  <div id="dead-toolbar" class="toolbar collapsed"><span>筛选</span><span>排序</span></div>
+  <p><span id="dead-icon" class="icon" aria-hidden="true"></span><span>设置</span></p>
 </main>
 </body>
 </html>

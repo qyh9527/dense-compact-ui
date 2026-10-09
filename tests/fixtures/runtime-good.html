@@ -5,7 +5,7 @@
 <title>运行时探针好例</title>
 <link rel="stylesheet" href="../../assets/tokens.css">
 <style>
-/* 与 runtime-bad.html 一一对应的合法写法，DC014–DC017 都不应告警。 */
+/* 与 runtime-bad.html 一一对应的合法写法，DC014–DC020 都不应告警。 */
 @font-face {
   font-family: "Unused Brand";
   src: url("./no-such-font.woff2") format("woff2");
@@ -97,7 +97,39 @@ button {
   color: var(--dc-text);
 }
 
-/* DC017 好例：声明了但没有元素使用的字体，加载失败也不影响渲染。 */
+/* DC017 / DC020 好例：声明了但没有元素使用的字体，加载失败也不影响渲染；::before 里的普通字符不算图标。 */
+@font-face {
+  font-family: "Unused Icons";
+  src: url("./no-such-icons.woff2") format("woff2");
+}
+.chevron::before {
+  content: "›";
+}
+
+/* DC018 好例：能解码的图片；只有 viewBox 的 SVG；离视口很远、还没触发请求的懒加载图片。 */
+.lazy-far {
+  margin-top: 6000px;
+}
+
+/* DC019 好例：flex 容器里的 gap 与对齐；多列布局的 column-gap 与 justify-content；把对齐重置回默认值。 */
+.toolbar {
+  display: flex;
+  gap: var(--dc-space-4);
+  align-items: center;
+  margin-top: var(--dc-space-5);
+}
+.columns {
+  column-count: 2;
+  column-gap: var(--dc-space-5);
+}
+.columns.centered {
+  column-width: 120px;
+  justify-content: center;
+}
+.reset {
+  justify-content: flex-start;
+  align-items: stretch;
+}
 </style>
 </head>
 <body>
@@ -115,6 +147,12 @@ button {
     <button type="button">对话框下的按钮</button>
     <dialog open><button type="button">确定</button></dialog>
   </div>
+  <div class="toolbar"><span class="chevron">筛选</span><span>排序</span></div>
+  <div class="columns reset"><p>第一栏说明文字</p><p>第二栏说明文字</p></div>
+  <div class="columns centered"><p>居中排布的第一栏</p><p>居中排布的第二栏</p></div>
+  <img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="" width="16" height="16">
+  <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%23888'/%3E%3C/svg%3E" alt="" width="16" height="16">
+  <img class="lazy-far" src="./no-such-image.png" alt="很远处的懒加载图片" width="48" height="48" loading="lazy">
 </main>
 </body>
 </html>
