@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>交互步骤样例第二页</title>
+<style>
+/* steps-app.html 里的链接跳到这里，用来验证步骤跟得上整页跳转。 */
+body {
+  margin: 0;
+  padding: 12px;
+  color: #1f2328;
+  background: #ffffff;
+  font: 13px/1.5 system-ui, sans-serif;
+}
+h1 {
+  margin: 0;
+  font-size: 16px;
+}
+</style>
+</head>
+<body>
+<h1 id="next-title">第二页</h1>
+<p id="loaded-later"></p>
+<script>
+setTimeout(() => {
+  document.getElementById('loaded-later').textContent = '稍后加载的内容';
+}, 300);
+</script>
+</body>
+</html>

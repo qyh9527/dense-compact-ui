@@ -4,7 +4,8 @@
 <meta charset="utf-8">
 <title>交互步骤样例</title>
 <style>
-/* 供 --steps 测试的小应用：按钮展开面板、搜索框回车出结果、下拉切密度、悬停出菜单。
+/* 供 --steps 测试的小应用：按钮展开面板、搜索框回车出结果、下拉切密度、悬停出菜单、链接跳到第二页。
+ * #late-next 在 400ms 后才跳转；#locked、#hidden-select 与 #density 的禁用项都选不了。
  * #dead 按钮故意什么都不做；面板里有一行 11px 文字，只有展开后才量得到（DC001）。 */
 body {
   margin: 0;
@@ -48,7 +49,12 @@ select {
   <select id="density" aria-label="密度">
     <option value="comfortable">宽松</option>
     <option value="compact">紧凑</option>
+    <option value="spacious" disabled>禁用项</option>
   </select>
+  <select id="locked" disabled aria-label="已锁定"><option>甲</option></select>
+  <select id="hidden-select" hidden aria-label="隐藏"><option>乙</option></select>
+  <a id="next" href="steps-next.html">下一页</a>
+  <button id="late-next" type="button">稍后跳转</button>
   <span class="menu-wrap"><button id="menu-trigger" type="button">更多</button><span id="menu"><a href="#">导出</a></span></span>
 </div>
 <p id="result"></p>
@@ -62,6 +68,9 @@ document.getElementById('open').addEventListener('click', () => {
 });
 document.getElementById('search').addEventListener('keydown', (event) => {
   if (event.key === 'Enter') document.getElementById('result').textContent = '已搜索：' + event.target.value;
+});
+document.getElementById('late-next').addEventListener('click', () => {
+  setTimeout(() => { location.href = 'steps-next.html'; }, 400);
 });
 document.getElementById('density').addEventListener('change', (event) => {
   document.body.classList.toggle('compact', event.target.value === 'compact');

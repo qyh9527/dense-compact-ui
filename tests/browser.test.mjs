@@ -435,3 +435,29 @@ test('真实浏览器：--steps 按步骤操作到目标状态再量取，期望
     }
   });
 });
+
+test('真实浏览器：--steps 跟得上整页跳转，选不了看不见或已禁用的下拉框', { timeout: STEP_TIMEOUT * 2 }, async (t) => {
+  if (!findBrowser()) {
+    t.skip(SKIP_REASON);
+    return;
+  }
+  const run = (steps) => runAudits({ target: fixture('steps-app.html'), viewports: [{ width: 1280, height: 720 }], steps });
+  const dc023 = (runs) => runs.flatMap((r) => r.report.findings.filter((f) => f.rule === 'DC023').map((f) => f.value.actual));
+
+  await t.test('点链接跳到第二页后再 expect 与量取；400ms 后才跳转也能等到新页面', async () => {
+    const now = await run([
+      { click: '#next' }, { expect: '#next-title' }, { expect: '#loaded-later', text: '稍后加载的内容' }, { audit: '第二页' },
+    ]);
+    assert.deepEqual(now.runs.map((r) => r.report.context.state), ['第二页']);
+    assert.deepEqual(dc023(now.runs), []);
+    const late = await run([{ click: '#late-next' }, { expect: '#next-title' }, { audit: '晚跳转' }]);
+    assert.deepEqual(late.runs.map((r) => r.report.context.state), ['晚跳转']);
+    assert.deepEqual(dc023(late.runs), []);
+  });
+
+  await t.test('已禁用、隐藏的下拉框与禁用的选项都记 DC023', async () => {
+    assert.deepEqual(dc023((await run([{ select: '#locked', value: '甲' }])).runs), ['下拉框已禁用']);
+    assert.deepEqual(dc023((await run([{ select: '#hidden-select', value: '乙' }])).runs), ['元素不可见']);
+    assert.deepEqual(dc023((await run([{ select: '#density', value: '禁用项' }])).runs), ['选项「禁用项」已禁用']);
+  });
+});

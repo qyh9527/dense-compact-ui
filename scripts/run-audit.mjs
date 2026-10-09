@@ -186,6 +186,7 @@ class Cdp {
     this.nextId = 1;
     this.pending = new Map();
     this.waiters = new Map();
+    this.listeners = new Map();
     ws.addEventListener('message', (event) => {
       const msg = JSON.parse(String(event.data));
       if (msg.id && this.pending.has(msg.id)) {
@@ -193,12 +194,23 @@ class Cdp {
         this.pending.delete(msg.id);
         if (msg.error) reject(new Error(`CDP ${method} 失败：${msg.error.message}`));
         else resolve(msg.result);
-      } else if (msg.method && this.waiters.has(msg.method)) {
+        return;
+      }
+      if (!msg.method) return;
+      (this.listeners.get(msg.method) || []).forEach((fn) => fn(msg.params));
+      if (this.waiters.has(msg.method)) {
         const list = this.waiters.get(msg.method);
         this.waiters.delete(msg.method);
         list.forEach((fn) => fn(msg.params));
       }
     });
+  }
+
+  // 持续监听某个事件，不影响 waitEvent；返回取消监听的函数。
+  on(method, fn) {
+    if (!this.listeners.has(method)) this.listeners.set(method, []);
+    this.listeners.get(method).push(fn);
+    return () => this.listeners.set(method, (this.listeners.get(method) || []).filter((f) => f !== fn));
   }
 
   static async connect(url) {
@@ -379,8 +391,12 @@ const SELECT_PROBE = `((sel, value) => {
   const el = document.querySelector(sel);
   if (!el) return { ok: false, actual: '找不到元素' };
   if (el.localName !== 'select') return { ok: false, actual: '目标不是 select 元素' };
+  if (el.matches(':disabled')) return { ok: false, actual: '下拉框已禁用' };
   const opt = Array.from(el.options).find((o) => o.value === value || o.text.trim() === value);
   if (!opt) return { ok: false, actual: '没有值或文字为「' + value + '」的选项' };
+  if (opt.disabled || (opt.parentElement && opt.parentElement.localName === 'optgroup' && opt.parentElement.disabled)) {
+    return { ok: false, actual: '选项「' + value + '」已禁用' };
+  }
   el.value = opt.value;
   el.dispatchEvent(new Event('input', { bubbles: true }));
   el.dispatchEvent(new Event('change', { bubbles: true }));
@@ -470,8 +486,11 @@ async function runStep(cdp, step) {
     return { ok: true };
   }
   if (step.select) {
+    // 和点击一样，用户看不见的下拉框选不了。
+    const { t, fail } = await reach(step.select, false);
+    if (fail) return { ok: false, ...fail };
     const r = await cdp.evaluate(`${SELECT_PROBE}(${JSON.stringify(step.select)}, ${JSON.stringify(step.value)})`);
-    return r.ok ? { ok: true } : { ok: false, expected: `${step.select} 有选项「${step.value}」`, actual: r.actual, rect: null };
+    return r.ok ? { ok: true } : { ok: false, expected: `${step.select} 可以选「${step.value}」`, actual: r.actual, rect: t.rect };
   }
   const sel = step.wait || step.expect;
   const timeout = step.timeout ?? (step.wait ? STEP_WAIT : 2000);
@@ -490,11 +509,19 @@ async function runStep(cdp, step) {
   return { ok: false, expected, actual, rect: m.rect };
 }
 
-// 把页面外算出的发现并入报告：排在已有发现之后，超出上限时截断并更新计数。
-function addFindings(report, list) {
+/**
+ * 把页面外算出的发现并入报告：排在已有发现之后，超出上限时截断并更新计数。
+ * force 为真时（步骤失败的 DC023）这些发现一定留下，必要时挤掉末尾的普通发现。
+ */
+export function addFindings(report, list, { force = false } = {}) {
   if (!list.length) return;
   const room = Math.max(0, MAX_FINDINGS - report.findings.length);
-  report.findings.push(...list.slice(0, room));
+  if (force && list.length > room) {
+    const kept = list.slice(0, MAX_FINDINGS);
+    report.findings = report.findings.slice(0, MAX_FINDINGS - kept.length).concat(kept);
+  } else {
+    report.findings.push(...list.slice(0, room));
+  }
   report.totalFindings += list.length;
   report.truncated = report.truncated || list.length > room;
 }
@@ -557,6 +584,8 @@ export async function runAudits({
     }
     cdp = await Cdp.connect(wsUrl);
     await cdp.send('Page.enable');
+    const { frameTree } = await cdp.send('Page.getFrameTree');
+    const mainFrameId = frameTree.frame.id;
 
     const runs = [];
     let loads = 0;
@@ -640,7 +669,22 @@ export async function runAudits({
               states.push(await auditHere(step.audit, i));
               continue;
             }
-            const result = await runStep(cdp, step);
+            // 动作可能引发整页跳转（链接、表单提交、脚本改 location）：动作前开始监听，跳转了就等新页面加载完。
+            let navigated = false;
+            const stopWatch = cdp.on('Page.frameStartedLoading', (p) => { if (p.frameId === mainFrameId) navigated = true; });
+            const loaded = cdp.waitEvent('Page.loadEventFired');
+            let result;
+            try {
+              result = await runStep(cdp, step);
+              if (!step.wait && !step.expect) await sleep(150);
+              if (navigated) await loaded;
+              else loaded.cancel();
+            } catch (err) {
+              loaded.cancel();
+              throw err;
+            } finally {
+              stopWatch();
+            }
             if (!result.ok) {
               const run = await auditHere(`第 ${i + 1} 步失败`, i);
               addFindings(run.report, [{
@@ -650,14 +694,26 @@ export async function runAudits({
                 value: { step: i + 1, action: step, expected: result.expected, actual: result.actual },
                 message: `第 ${i + 1} 步「${describeStep(step)}」没达成：期望 ${result.expected}，实际 ${result.actual}。` +
                   '复核：操作是否真的生效（按钮被遮挡、事件没绑定、请求失败），或步骤里的选择器与期望写错了。后面的步骤没有执行。',
-              }]);
+              }], { force: true });
               states.push(run);
               failed = true;
               break;
             }
-            // 动作之后等 DOM 静默，再做下一步。
+            // 动作之后等 DOM 静默，再做下一步。跳转晚于 150ms 才开始时，静默探针会碰上上下文被销毁：等新页面加载完再探一次。
             if (!step.wait && !step.expect && settle > 0) {
-              await cdp.evaluate(`${READY_PROBE}(null, ${settle}, 0, ${SETTLE_CAP})`, { awaitPromise: true, timeoutMs: SETTLE_CAP + 15_000 });
+              const quiet = () => cdp.evaluate(`${READY_PROBE}(null, ${settle}, 0, ${SETTLE_CAP})`, { awaitPromise: true, timeoutMs: SETTLE_CAP + 15_000 });
+              const late = cdp.waitEvent('Page.loadEventFired');
+              try {
+                await quiet();
+                late.cancel();
+              } catch (err) {
+                if (!/context|Inspected target navigated/i.test(err.message)) {
+                  late.cancel();
+                  throw err;
+                }
+                await late;
+                await quiet();
+              }
             }
           }
           if (!failed && !steps.some((step) => step.audit)) states.push(await auditHere('步骤结束', steps.length));
