@@ -1,0 +1,39 @@
+[
+  {
+    "click": "#open"
+  },
+  {
+    "expect": "#panel"
+  },
+  {
+    "audit": "面板展开"
+  },
+  {
+    "fill": "#search",
+    "value": "订单 B"
+  },
+  {
+    "press": "Enter"
+  },
+  {
+    "expect": "#result",
+    "text": "已搜索：订单 B"
+  },
+  {
+    "select": "#density",
+    "value": "compact"
+  },
+  {
+    "expect": "body.compact"
+  },
+  {
+    "hover": "#menu-trigger"
+  },
+  {
+    "expect": "#menu a",
+    "count": 1
+  },
+  {
+    "audit": "全部完成"
+  }
+]

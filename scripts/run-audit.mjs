@@ -8,6 +8,9 @@
 //                              [--width 1280 --height 720] [--out report.json]
 //   多视口：用可重复的 --viewport 宽x高 代替 --width / --height，同一个浏览器里逐个视口重载并审计，
 //   输出 { schema: 'dense-audit-multi-v1', totalFindings, reports: [每个视口一份 dense-audit-v1] }。
+// --steps steps.json：加载后按步骤文件依次 click / fill / press / hover / select / wait / expect，
+//   在 { "audit": "状态名" } 处量取（没写就在最后量一次）；某一步做不了或期望没达成记 DC023 并停下，
+//   在失败处再量一次。输出同多视口格式，context.state 标明状态。
 // --scroll：量取后把文档和主要滚动容器各滚到顶、滚到底，内容被固定栏永久盖住的报 DC022，最后恢复滚动位置。
 // --color-scheme light,dark：按系统深浅色偏好（prefers-color-scheme）各加载一次；给了两种时互相比较，
 //   颜色写死没跟主题变的报 DC021，记在出问题的那种配色的报告里。输出同多视口格式。
@@ -15,7 +18,7 @@
 // --settle：再等 DOM 连续这么多毫秒没有变化（默认 500，最多等 10 秒；0 跳过）。
 // 退出码：0 没有告警；1 有告警；2 浏览器、导航或脚本出错（原因写到 stderr）。
 //
-// 也导出 runAudit / runAudits / findBrowser，供 tests/browser.test.mjs 复用同一套 CDP 逻辑。
+// 也导出 runAudit / runAudits / checkSteps / findBrowser，供 tests/browser.test.mjs 复用同一套 CDP 逻辑。
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -287,6 +290,206 @@ export async function runAudit({ width = 1280, height = 720, ...opts } = {}) {
   return runs[0];
 }
 
+// ---- 交互步骤（--steps） ----
+
+const STEP_ACTIONS = ['click', 'fill', 'press', 'hover', 'select', 'wait', 'expect', 'audit'];
+// 步骤里 wait / expect 的默认等待上限与允许的最大值（毫秒）。
+const STEP_WAIT = 5000;
+const STEP_WAIT_CAP = 60_000;
+// 常用按键：[windowsVirtualKeyCode, code, 产生的文字]。
+const KEYS = {
+  Enter: [13, 'Enter', '\r'],
+  Tab: [9, 'Tab'],
+  Escape: [27, 'Escape'],
+  Backspace: [8, 'Backspace'],
+  Delete: [46, 'Delete'],
+  ArrowUp: [38, 'ArrowUp'],
+  ArrowDown: [40, 'ArrowDown'],
+  ArrowLeft: [37, 'ArrowLeft'],
+  ArrowRight: [39, 'ArrowRight'],
+  Home: [36, 'Home'],
+  End: [35, 'End'],
+  PageUp: [33, 'PageUp'],
+  PageDown: [34, 'PageDown'],
+  Space: [32, 'Space', ' '],
+};
+
+/** 检查步骤数组的格式，不对时抛出指明第几步的中文错误。 */
+export function checkSteps(steps) {
+  if (!Array.isArray(steps) || !steps.length) throw new Error('步骤文件要是非空的 JSON 数组');
+  steps.forEach((step, i) => {
+    const at = `第 ${i + 1} 步`;
+    if (!step || typeof step !== 'object' || Array.isArray(step)) throw new Error(`${at}要是对象`);
+    const actions = Object.keys(step).filter((k) => STEP_ACTIONS.includes(k));
+    if (actions.length !== 1) throw new Error(`${at}要恰好写一个动作（${STEP_ACTIONS.join(' / ')}），实际：${actions.join('、') || '没有'}`);
+    const action = actions[0];
+    if (typeof step[action] !== 'string' || !step[action].trim()) throw new Error(`${at}的 ${action} 要是非空字符串`);
+    if ((action === 'fill' || action === 'select') && typeof step.value !== 'string') throw new Error(`${at}的 ${action} 要有字符串 value`);
+    if (action === 'press' && !KEYS[step.press] && [...step.press].length !== 1) {
+      throw new Error(`${at}的 press 只支持单个字符或 ${Object.keys(KEYS).join(' / ')}`);
+    }
+    if (step.timeout !== undefined && !(Number.isInteger(step.timeout) && step.timeout > 0 && step.timeout <= STEP_WAIT_CAP)) {
+      throw new Error(`${at}的 timeout 要是 1–${STEP_WAIT_CAP} 的整数（毫秒）`);
+    }
+    if (step.count !== undefined && !(Number.isInteger(step.count) && step.count >= 0)) throw new Error(`${at}的 count 要是非负整数`);
+    if (step.text !== undefined && typeof step.text !== 'string') throw new Error(`${at}的 text 要是字符串`);
+    if (step.visible !== undefined && typeof step.visible !== 'boolean') throw new Error(`${at}的 visible 要是 true 或 false`);
+  });
+  return steps;
+}
+
+// 页面里的可见判断，与 dense-audit.js 同一口径。
+const VISIBLE_FN = `(el) => {
+  const r = el.getBoundingClientRect();
+  if (!(r.width > 0 && r.height > 0)) return false;
+  return typeof el.checkVisibility === 'function'
+    ? el.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })
+    : getComputedStyle(el).visibility === 'visible';
+}`;
+
+// 找到元素、滚进视口，返回中心点与矩形；focus 为真时聚焦并选中已有内容（给 fill 用）。
+const TARGET_PROBE = `((sel, focus) => {
+  const visible = ${VISIBLE_FN};
+  const el = document.querySelector(sel);
+  if (!el) return { found: false };
+  el.scrollIntoView({ block: 'center', inline: 'center' });
+  const r = el.getBoundingClientRect();
+  const out = {
+    found: true, visible: visible(el),
+    x: r.left + r.width / 2, y: r.top + r.height / 2,
+    rect: { x: Math.round(r.x * 10) / 10, y: Math.round(r.y * 10) / 10, width: Math.round(r.width * 10) / 10, height: Math.round(r.height * 10) / 10 },
+  };
+  if (focus) {
+    el.focus();
+    if (typeof el.select === 'function') el.select();
+    else if (el.isContentEditable) {
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      const selection = getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+    }
+    out.focused = document.activeElement === el;
+  }
+  return out;
+})`;
+
+// 选中下拉框里 value 或文字等于给定值的选项，派发 input / change。
+const SELECT_PROBE = `((sel, value) => {
+  const el = document.querySelector(sel);
+  if (!el) return { ok: false, actual: '找不到元素' };
+  if (el.localName !== 'select') return { ok: false, actual: '目标不是 select 元素' };
+  const opt = Array.from(el.options).find((o) => o.value === value || o.text.trim() === value);
+  if (!opt) return { ok: false, actual: '没有值或文字为「' + value + '」的选项' };
+  el.value = opt.value;
+  el.dispatchEvent(new Event('input', { bubbles: true }));
+  el.dispatchEvent(new Event('change', { bubbles: true }));
+  return { ok: true };
+})`;
+
+// 在 timeout 内轮询选择器：返回总数、可见数、可见元素里是否含有 text。不带回页面文字。
+const MATCH_PROBE = `(async (sel, text, want, timeout) => {
+  const visible = ${VISIBLE_FN};
+  const t0 = performance.now();
+  for (;;) {
+    const all = Array.from(document.querySelectorAll(sel));
+    const shown = all.filter(visible);
+    const textFound = text === null || shown.some((el) => (el.textContent || '').includes(text));
+    const first = shown[0] || all[0];
+    const r = first ? first.getBoundingClientRect() : null;
+    const result = {
+      total: all.length, shown: shown.length, textFound,
+      rect: r ? { x: Math.round(r.x * 10) / 10, y: Math.round(r.y * 10) / 10, width: Math.round(r.width * 10) / 10, height: Math.round(r.height * 10) / 10 } : null,
+    };
+    const ok = want.hidden ? shown.length === 0
+      : (want.count !== null ? shown.length === want.count : shown.length > 0) && textFound;
+    if (ok) return { ok: true, ...result };
+    if (performance.now() - t0 >= timeout) return { ok: false, ...result };
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+})`;
+
+function describeStep(step) {
+  if (step.click) return `点击 ${step.click}`;
+  if (step.fill !== undefined) return `在 ${step.fill} 输入「${step.value}」`;
+  if (step.press) return `按 ${step.press}`;
+  if (step.hover) return `悬停到 ${step.hover}`;
+  if (step.select) return `在 ${step.select} 选择「${step.value}」`;
+  if (step.wait) return `等待 ${step.wait} 出现`;
+  if (step.expect) return `检查 ${step.expect}`;
+  return `量取「${step.audit}」`;
+}
+
+async function pressKey(cdp, key) {
+  const known = KEYS[key];
+  const vk = known ? known[0] : key.toUpperCase().charCodeAt(0);
+  const code = known ? known[1] : (/^[a-z]$/i.test(key) ? `Key${key.toUpperCase()}` : (/^[0-9]$/.test(key) ? `Digit${key}` : ''));
+  const text = known ? known[2] : key;
+  const keyName = key === 'Space' ? ' ' : key;
+  const base = { key: keyName, code, windowsVirtualKeyCode: vk, nativeVirtualKeyCode: vk };
+  await cdp.send('Input.dispatchKeyEvent', { type: text ? 'keyDown' : 'rawKeyDown', ...base, ...(text ? { text, unmodifiedText: text } : {}) });
+  await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', ...base });
+}
+
+/**
+ * 执行一步。返回 { ok: true } 或 { ok: false, expected, actual, rect }：
+ * 找不到元素、元素不可见、选项不存在、等待超时、期望不符都算没达成，由调用方记 DC023。
+ */
+async function runStep(cdp, step) {
+  const target = async (sel, focus = false) => cdp.evaluate(`${TARGET_PROBE}(${JSON.stringify(sel)}, ${focus})`);
+  const mouse = async (type, x, y) => cdp.send('Input.dispatchMouseEvent', {
+    type, x, y, button: type === 'mouseMoved' ? 'none' : 'left', clickCount: type === 'mouseMoved' ? 0 : 1,
+  });
+  const reach = async (sel, focus) => {
+    const t = await target(sel, focus);
+    if (!t.found) return { fail: { expected: `${sel} 存在`, actual: '找不到元素', rect: null } };
+    if (!t.visible) return { fail: { expected: `${sel} 可见`, actual: '元素不可见', rect: t.rect } };
+    return { t };
+  };
+
+  if (step.click || step.hover) {
+    const { t, fail } = await reach(step.click || step.hover, false);
+    if (fail) return { ok: false, ...fail };
+    await mouse('mouseMoved', t.x, t.y);
+    if (step.click) {
+      await mouse('mousePressed', t.x, t.y);
+      await mouse('mouseReleased', t.x, t.y);
+    }
+    return { ok: true };
+  }
+  if (step.fill !== undefined) {
+    const { t, fail } = await reach(step.fill, true);
+    if (fail) return { ok: false, ...fail };
+    if (!t.focused) return { ok: false, expected: `${step.fill} 能聚焦并输入`, actual: '元素无法获得焦点', rect: t.rect };
+    if (step.value) await cdp.send('Input.insertText', { text: step.value });
+    else await pressKey(cdp, 'Backspace');
+    return { ok: true };
+  }
+  if (step.press) {
+    await pressKey(cdp, step.press);
+    return { ok: true };
+  }
+  if (step.select) {
+    const r = await cdp.evaluate(`${SELECT_PROBE}(${JSON.stringify(step.select)}, ${JSON.stringify(step.value)})`);
+    return r.ok ? { ok: true } : { ok: false, expected: `${step.select} 有选项「${step.value}」`, actual: r.actual, rect: null };
+  }
+  const sel = step.wait || step.expect;
+  const timeout = step.timeout ?? (step.wait ? STEP_WAIT : 2000);
+  const want = {
+    hidden: step.visible === false,
+    count: step.count === undefined ? null : step.count,
+  };
+  const text = step.text === undefined ? null : step.text;
+  const m = await cdp.evaluate(`${MATCH_PROBE}(${JSON.stringify(sel)}, ${JSON.stringify(text)}, ${JSON.stringify(want)}, ${timeout})`, {
+    awaitPromise: true, timeoutMs: timeout + 15_000,
+  });
+  if (m.ok) return { ok: true };
+  const expected = want.hidden ? `${sel} 不可见`
+    : `${sel} ${want.count !== null ? `可见 ${want.count} 个` : '可见'}${text !== null ? `且含「${text}」` : ''}`;
+  const actual = `${timeout}ms 内可见 ${m.shown} 个（共 ${m.total} 个）${text !== null && !m.textFound ? `，可见元素里没有「${text}」` : ''}`;
+  return { ok: false, expected, actual, rect: m.rect };
+}
+
 // 把页面外算出的发现并入报告：排在已有发现之后，超出上限时截断并更新计数。
 function addFindings(report, list) {
   if (!list.length) return;
@@ -307,17 +510,20 @@ function loadThemeDiff(source) {
 /**
  * 同一个浏览器里按 viewports 顺序逐个视口审计：每个视口先切尺寸，再重新加载页面并等就绪，
  * 量到的是在该尺寸下首次布局的结果。返回 { runs: [{ report, htmlLengthBefore, htmlLengthAfter }] }。
+ * steps：加载后按顺序执行的步骤（见 checkSteps）；在 audit 步骤处各量一次，没有 audit 步骤就在最后量一次，
+ *   某一步没达成时在该处量一次并记 DC023，后面的步骤不再执行。context.state 标明状态，context.stepsDone 为已执行的步数。
  * scroll：量取后检查滚到顶 / 底时被固定栏永久盖住的内容（DC022）；DC016 已报的元素不重复报。
  * colorSchemes（如 ['light', 'dark']）：每个视口按每种 prefers-color-scheme 各加载一次，runs 按视口、配色顺序排列；
  * 给了两种以上时两两比较颜色快照，DC021 记在出问题的那种配色的报告里。
  * 其余参数与 runAudit 相同。
  */
 export async function runAudits({
-  target, touch = false, root, viewports, colorSchemes, scroll = false,
+  target, touch = false, root, viewports, colorSchemes, scroll = false, steps,
   waitFor, settle = DEFAULT_SETTLE, waitTimeoutMs = STEP_TIMEOUT,
 } = {}) {
   if (!target) throw new Error('缺少要检查的页面：请给 URL 或本地 html 路径');
   if (!Array.isArray(viewports) || !viewports.length) throw new Error('缺少视口：viewports 至少要有一项');
+  if (steps) checkSteps(steps);
   const bin = findBrowser();
   if (!bin) throw new Error('未找到 Chromium 内核浏览器：请安装 Edge 或 Chrome，或用 CHROME_PATH 指定可执行文件');
   const url = toUrl(target);
@@ -397,39 +603,87 @@ export async function runAudits({
         }
         const ready = { waitFor: waitFor || null, settled: probe.settled, waitedMs: Date.now() - readyStart };
 
-        const htmlLengthBefore = await cdp.evaluate('document.documentElement.outerHTML.length');
-        await cdp.evaluate(scriptSource);
-        const options = { touch: touch ? true : undefined, root: root || undefined };
-        const json = await cdp.evaluate(`JSON.stringify(denseAudit(${JSON.stringify(options)}))`);
-        const report = JSON.parse(json);
-        if (scroll) {
-          const scrollOptions = JSON.stringify({ root: root || undefined });
-          const covered = JSON.parse(await cdp.evaluate(`denseAuditScroll(${scrollOptions}).then(JSON.stringify)`, { awaitPromise: true }));
-          addFindings(report, covered.filter((f) => !report.findings.some((g) => g.rule === 'DC016' && g.selector === f.selector)));
-          report.context.scrollChecked = true;
+        // 在当前页面状态量取一次；state 与 stepsDone 只在跑步骤时写进报告。
+        const auditHere = async (state, stepsDone) => {
+          const htmlLengthBefore = await cdp.evaluate('document.documentElement.outerHTML.length');
+          await cdp.evaluate(scriptSource);
+          const options = { touch: touch ? true : undefined, root: root || undefined };
+          const json = await cdp.evaluate(`JSON.stringify(denseAudit(${JSON.stringify(options)}))`);
+          const report = JSON.parse(json);
+          if (scroll) {
+            const scrollOptions = JSON.stringify({ root: root || undefined });
+            const covered = JSON.parse(await cdp.evaluate(`denseAuditScroll(${scrollOptions}).then(JSON.stringify)`, { awaitPromise: true }));
+            addFindings(report, covered.filter((f) => !report.findings.some((g) => g.rule === 'DC016' && g.selector === f.selector)));
+            report.context.scrollChecked = true;
+          }
+          const htmlLengthAfter = await cdp.evaluate('document.documentElement.outerHTML.length');
+          report.context.ready = ready;
+          if (scheme) report.context.colorScheme = scheme;
+          if (steps) {
+            report.context.state = state;
+            report.context.stepsDone = stepsDone;
+          }
+          const run = { report, htmlLengthBefore, htmlLengthAfter };
+          if (themeDiff) {
+            const colorOptions = JSON.stringify({ root: root || undefined });
+            run.colors = JSON.parse(await cdp.evaluate(`JSON.stringify(denseAuditColors(${colorOptions}))`));
+          }
+          return run;
+        };
+
+        const states = [];
+        if (!steps) states.push(await auditHere(null, 0));
+        else {
+          let failed = false;
+          for (const [i, step] of steps.entries()) {
+            if (step.audit) {
+              states.push(await auditHere(step.audit, i));
+              continue;
+            }
+            const result = await runStep(cdp, step);
+            if (!result.ok) {
+              const run = await auditHere(`第 ${i + 1} 步失败`, i);
+              addFindings(run.report, [{
+                rule: 'DC023',
+                selector: step.click || step.fill || step.hover || step.select || step.wait || step.expect || 'document',
+                rect: result.rect || { x: 0, y: 0, width, height },
+                value: { step: i + 1, action: step, expected: result.expected, actual: result.actual },
+                message: `第 ${i + 1} 步「${describeStep(step)}」没达成：期望 ${result.expected}，实际 ${result.actual}。` +
+                  '复核：操作是否真的生效（按钮被遮挡、事件没绑定、请求失败），或步骤里的选择器与期望写错了。后面的步骤没有执行。',
+              }]);
+              states.push(run);
+              failed = true;
+              break;
+            }
+            // 动作之后等 DOM 静默，再做下一步。
+            if (!step.wait && !step.expect && settle > 0) {
+              await cdp.evaluate(`${READY_PROBE}(null, ${settle}, 0, ${SETTLE_CAP})`, { awaitPromise: true, timeoutMs: SETTLE_CAP + 15_000 });
+            }
+          }
+          if (!failed && !steps.some((step) => step.audit)) states.push(await auditHere('步骤结束', steps.length));
         }
-        const htmlLengthAfter = await cdp.evaluate('document.documentElement.outerHTML.length');
-        report.context.ready = ready;
-        if (scheme) report.context.colorScheme = scheme;
-        const run = { report, htmlLengthBefore, htmlLengthAfter };
-        if (themeDiff) {
-          const colorOptions = JSON.stringify({ root: root || undefined });
-          run.colors = JSON.parse(await cdp.evaluate(`JSON.stringify(denseAuditColors(${colorOptions}))`));
-        }
-        group.push(run);
+        group.push(states);
       }
 
-      // 同一视口下两两比较配色方案：b 相对 a 出现的问题记在 b 的报告里。
+      // 同一视口下两两比较配色方案，按同一状态对齐：b 相对 a 出现的问题记在 b 的报告里。
       if (themeDiff) {
-        for (const [j, run] of group.entries()) {
+        for (const [j, states] of group.entries()) {
           for (const [i, base] of group.entries()) {
-            if (i !== j) addFindings(run.report, themeDiff(base.colors, run.colors, { scheme: schemes[j] }));
+            if (i === j) continue;
+            states.forEach((run, k) => {
+              const peer = base[k];
+              if (peer && peer.report.context.state === run.report.context.state) {
+                addFindings(run.report, themeDiff(peer.colors, run.colors, { scheme: schemes[j] }));
+              }
+            });
           }
         }
       }
-      for (const run of group) {
-        delete run.colors;
-        runs.push(run);
+      for (const states of group) {
+        for (const run of states) {
+          delete run.colors;
+          runs.push(run);
+        }
       }
     }
     return { runs };
@@ -461,6 +715,16 @@ function parseArgs(argv) {
     const a = argv[i];
     if (a === '--touch') opts.touch = true;
     else if (a === '--scroll') opts.scroll = true;
+    else if (a === '--steps') {
+      const stepsFile = needValue(a, i++);
+      let parsed;
+      try {
+        parsed = JSON.parse(fs.readFileSync(stepsFile, 'utf8'));
+      } catch (err) {
+        throw new Error(`读不了步骤文件 ${stepsFile}：${err.message}`);
+      }
+      opts.steps = checkSteps(parsed);
+    }
     else if (a === '--root') opts.root = needValue(a, i++);
     else if (a === '--out') opts.out = needValue(a, i++);
     else if (a === '--wait-for') opts.waitFor = needValue(a, i++);
@@ -482,7 +746,7 @@ function parseArgs(argv) {
     } else if (a.startsWith('--')) throw new Error(`未知参数：${a}`);
     else rest.push(a);
   }
-  if (rest.length !== 1) throw new Error('用法：node scripts/run-audit.mjs <URL 或本地 html 路径> [--touch] [--root <选择器>] [--wait-for <选择器>] [--settle 500] [--scroll] [--width 1280 --height 720 | --viewport 1280x720 --viewport 390x844 …] [--color-scheme light,dark] [--out report.json]');
+  if (rest.length !== 1) throw new Error('用法：node scripts/run-audit.mjs <URL 或本地 html 路径> [--touch] [--root <选择器>] [--wait-for <选择器>] [--settle 500] [--scroll] [--steps steps.json] [--width 1280 --height 720 | --viewport 1280x720 --viewport 390x844 …] [--color-scheme light,dark] [--out report.json]');
   if (viewports.length && (opts.width || opts.height)) throw new Error('--viewport 不能和 --width / --height 同时使用');
   if (viewports.length) opts.viewports = viewports;
   if (schemes.length) opts.colorSchemes = schemes;
@@ -493,10 +757,10 @@ function parseArgs(argv) {
 async function main() {
   try {
     const { out, ...opts } = parseArgs(process.argv.slice(2));
-    // 传了 --viewport 或 --color-scheme 就输出多份报告：每个视口、每种配色一份 dense-audit-v1；都不传时输出与以前完全相同。
+    // 传了 --viewport、--color-scheme 或 --steps 就输出多份报告：每个视口、配色、状态一份 dense-audit-v1；都不传时输出与以前完全相同。
     let result;
     let total;
-    if (opts.viewports || opts.colorSchemes) {
+    if (opts.viewports || opts.colorSchemes || opts.steps) {
       const { width = 1280, height = 720, ...rest } = opts;
       const { runs } = await runAudits({ ...rest, viewports: opts.viewports || [{ width, height }] });
       const reports = runs.map((r) => r.report);

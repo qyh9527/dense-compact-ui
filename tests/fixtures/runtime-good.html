@@ -30,6 +30,11 @@ button {
   border-radius: var(--dc-radius-control);
   background: transparent;
 }
+select {
+  font: inherit;
+  color: var(--dc-text);
+  background: transparent;
+}
 :focus-visible {
   outline: var(--dc-focus-width) solid var(--dc-accent);
   outline-offset: var(--dc-focus-offset);
@@ -148,6 +153,7 @@ button {
     <dialog open><button type="button">确定</button></dialog>
   </div>
   <div class="toolbar"><span class="chevron">筛选</span><span>排序</span></div>
+  <select aria-label="排序方式"><option>按时间</option><option>按金额</option></select>
   <div class="columns reset"><p>第一栏说明文字</p><p>第二栏说明文字</p></div>
   <div class="columns centered"><p>居中排布的第一栏</p><p>居中排布的第二栏</p></div>
   <img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="" width="16" height="16">

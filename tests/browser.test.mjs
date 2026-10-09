@@ -364,3 +364,74 @@ test('真实浏览器：--scroll 滚到顶 / 底时被固定栏永久盖住的�
     assert.ok(report.findings.some((f) => f.rule === 'DC022' && f.selector === '#last-row'));
   });
 });
+
+test('真实浏览器：--steps 按步骤操作到目标状态再量取，期望没达成记 DC023', { timeout: STEP_TIMEOUT * 2 }, async (t) => {
+  if (!findBrowser()) {
+    t.skip(SKIP_REASON);
+    return;
+  }
+  const readSteps = (name) => JSON.parse(fs.readFileSync(fixture(name), 'utf8'));
+  const states = (runs) => runs.map((r) => [r.report.context.state, r.report.context.stepsDone]);
+
+  await t.test('steps-ok.json：点击、输入、回车、选择、悬停都生效，在两个标记处各量一次；面板展开后才量到 11px 文字', async () => {
+    const { runs } = await runAudits({
+      target: fixture('steps-app.html'), viewports: [{ width: 1280, height: 720 }], steps: readSteps('steps-ok.json'),
+    });
+    assert.deepEqual(states(runs), [['面板展开', 2], ['全部完成', 10]]);
+    for (const { report } of runs) {
+      assert.ok(!report.findings.some((f) => f.rule === 'DC023'), JSON.stringify(report.findings));
+      assert.ok(report.findings.some((f) => f.rule === 'DC001' && f.selector === '#panel > p:nth-of-type(2)'));
+    }
+    const before = (await runAudit({ target: fixture('steps-app.html') })).report;
+    assert.ok(!before.findings.some((f) => f.rule === 'DC001'), '面板没展开时量不到 11px 文字');
+  });
+
+  await t.test('steps-fail.json：点了没反应的按钮，第 3 步期望落空记 DC023，在失败处量一次，后面的步骤不执行', async () => {
+    const { runs } = await runAudits({
+      target: fixture('steps-app.html'), viewports: [{ width: 1280, height: 720 }], steps: readSteps('steps-fail.json'),
+    });
+    assert.deepEqual(states(runs), [['初始', 0], ['第 3 步失败', 2]]);
+    const dc023 = runs[1].report.findings.filter((f) => f.rule === 'DC023');
+    assert.equal(dc023.length, 1);
+    assert.equal(dc023[0].selector, '#panel');
+    assert.deepEqual(dc023[0].value, {
+      step: 3, action: { expect: '#panel', timeout: 500 }, expected: '#panel 可见', actual: '500ms 内可见 0 个（共 1 个）',
+    });
+    assert.equal(runs[1].report.totalFindings, runs[1].report.findings.length);
+  });
+
+  await t.test('没有 audit 步骤时在最后量一次；找不到元素记 DC023', async () => {
+    const done = await runAudits({
+      target: fixture('steps-app.html'), viewports: [{ width: 1280, height: 720 }], steps: [{ click: '#open' }],
+    });
+    assert.deepEqual(states(done.runs), [['步骤结束', 1]]);
+    const missing = await runAudits({
+      target: fixture('steps-app.html'), viewports: [{ width: 1280, height: 720 }], steps: [{ click: '#nope' }],
+    });
+    assert.deepEqual(states(missing.runs), [['第 1 步失败', 0]]);
+    const f = missing.runs[0].report.findings.find((x) => x.rule === 'DC023');
+    assert.equal(f.value.actual, '找不到元素');
+  });
+
+  await t.test('CLI：--steps 输出多状态报告；步骤文件格式不对时退出码 2', () => {
+    const result = runCli([fixture('steps-app.html'), '--steps', fixture('steps-ok.json')]);
+    assert.equal(result.status, 1, `有 DC001 时退出码应为 1，stderr：${result.stderr}`);
+    const out = JSON.parse(result.stdout);
+    assert.equal(out.schema, 'dense-audit-multi-v1');
+    assert.deepEqual(out.reports.map((r) => r.context.state), ['面板展开', '全部完成']);
+
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dense-steps-'));
+    try {
+      const bad = path.join(tmp, 'bad.json');
+      fs.writeFileSync(bad, JSON.stringify([{ tap: '#open' }]));
+      const invalid = runCli([fixture('steps-app.html'), '--steps', bad]);
+      assert.equal(invalid.status, 2);
+      assert.match(invalid.stderr, /第 1 步要恰好写一个动作/);
+      const missingFile = runCli([fixture('steps-app.html'), '--steps', path.join(tmp, 'none.json')]);
+      assert.equal(missingFile.status, 2);
+      assert.match(missingFile.stderr, /读不了步骤文件/);
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+});

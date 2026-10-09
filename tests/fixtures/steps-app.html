@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>交互步骤样例</title>
+<style>
+/* 供 --steps 测试的小应用：按钮展开面板、搜索框回车出结果、下拉切密度、悬停出菜单。
+ * #dead 按钮故意什么都不做；面板里有一行 11px 文字，只有展开后才量得到（DC001）。 */
+body {
+  margin: 0;
+  padding: 12px;
+  color: #1f2328;
+  background: #ffffff;
+  font: 13px/1.5 system-ui, sans-serif;
+}
+button,
+input,
+select {
+  height: 28px;
+  font: inherit;
+}
+.menu-wrap {
+  position: relative;
+  display: inline-block;
+}
+#menu {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  padding: 6px;
+  border: 1px solid #d0d7de;
+  background: #f6f8fa;
+}
+.menu-wrap:hover #menu {
+  display: block;
+}
+#panel .tiny {
+  font-size: 11px;
+}
+</style>
+</head>
+<body>
+<div class="bar">
+  <button id="open" type="button">展开面板</button>
+  <button id="dead" type="button">没有反应的按钮</button>
+  <input id="search" type="text" aria-label="搜索订单">
+  <select id="density" aria-label="密度">
+    <option value="comfortable">宽松</option>
+    <option value="compact">紧凑</option>
+  </select>
+  <span class="menu-wrap"><button id="menu-trigger" type="button">更多</button><span id="menu"><a href="#">导出</a></span></span>
+</div>
+<p id="result"></p>
+<section id="panel" hidden>
+  <p>面板内容</p>
+  <p class="tiny">11px 的说明文字</p>
+</section>
+<script>
+document.getElementById('open').addEventListener('click', () => {
+  document.getElementById('panel').hidden = false;
+});
+document.getElementById('search').addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') document.getElementById('result').textContent = '已搜索：' + event.target.value;
+});
+document.getElementById('density').addEventListener('change', (event) => {
+  document.body.classList.toggle('compact', event.target.value === 'compact');
+});
+</script>
+</body>
+</html>
