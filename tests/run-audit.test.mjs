@@ -1,7 +1,7 @@
-// run-audit.mjs 里不用浏览器的纯函数：步骤格式校验、发现合并。
+// run-audit.mjs 里不用浏览器的纯函数：步骤格式校验、发现合并、截图文件名。
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { addFindings, checkSteps } from '../scripts/run-audit.mjs';
+import { addFindings, checkSteps, screenshotName } from '../scripts/run-audit.mjs';
 
 const report = (n) => ({
   findings: Array.from({ length: n }, (_, i) => ({ rule: 'DC001', selector: `#n${i}` })),
@@ -43,4 +43,11 @@ test('checkSteps：合法步骤原样返回，格式不对时指明第几步', (
   assert.throws(() => checkSteps([{ click: '#a' }, { tap: '#b' }]), /第 2 步要恰好写一个动作/);
   assert.throws(() => checkSteps([{ select: '#s' }]), /第 1 步的 select 要有字符串 value/);
   assert.throws(() => checkSteps([{ expect: '#c', count: -1 }]), /count 要是非负整数/);
+});
+
+test('screenshotName：序号补零，按视口、配色、状态拼接；文件名不能用的字符换成 _，状态名最多取 60 个字', () => {
+  assert.equal(screenshotName(1, { width: 1280, height: 720 }, null, null), '01-1280x720.png');
+  assert.equal(screenshotName(12, { width: 390, height: 844 }, 'dark', '第 3 步失败'), '12-390x844-dark-第 3 步失败.png');
+  assert.equal(screenshotName(2, { width: 390, height: 844 }, null, ' 弹窗/确认?  "删除"\x5c '), '02-390x844-弹窗_确认_ _删除__.png');
+  assert.equal(screenshotName(3, { width: 1, height: 1 }, 'light', '长'.repeat(80)), `03-1x1-light-${'长'.repeat(60)}.png`);
 });

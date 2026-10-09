@@ -14,6 +14,7 @@ node <技能目录>/scripts/run-audit.mjs http://localhost:5173/nodes --touch --
 - 多个视口用可重复的 `--viewport 宽x高` 代替 `--width` / `--height`，如 `--viewport 1280x720 --viewport 390x844`：同一个浏览器里逐个视口重新加载后采集，输出 `{ schema: "dense-audit-multi-v1", totalFindings, reports }`，`reports` 里每个视口一份普通报告。不传时输出格式不变。
 - 有固定顶栏、底栏或吸顶区域时加 `--scroll`：量取后把文档和面积最大的几个滚动容器各滚到顶、滚到底（首屏之外的容器先滚进视口），内容被固定栏永久盖住的记为 DC022，检查完恢复原来的滚动位置。滚动可能触发懒加载或无限滚动请求，只在能接受这些请求的环境里用。
 - 页面跟随系统深浅色偏好（`prefers-color-scheme`）时，加 `--color-scheme light,dark`：每种配色各加载一次，输出同多视口格式，`context.colorScheme` 标明配色；两种都给时互相比较，颜色写死没跟主题变的记为 DC021。可与 `--viewport` 一起用。
+- `--screenshot <目录>`：每份报告量取前截一张当前视口的 PNG 存进该目录（没有就新建，同名覆盖），文件名形如 `03-390x844-dark-展开.png`（序号与报告顺序一致，没有配色或状态时省略），路径写在 `context.screenshot`。修复前后各存一个目录，同名文件就是同一视口、配色和状态，供 quality-workflow.md 的观感检查并排对比。截图不影响告警和退出码；画面里有真实数据时，按数据的敏感程度保存和分享。
 - 页面加载后默认等 DOM 连续 500ms 不变再采集（最多 10 秒，`--settle <毫秒>` 调整，0 关闭），然后等网页字体加载结束（最多 5 秒）。数据靠接口或异步组件晚到的页面，用 `--wait-for <选择器>` 指定代表真实内容已渲染的元素，比如表格首行；只靠静默等待可能量到加载壳。报告的 `context.ready` 记录实际等待：`settled: false` 表示传了 `--settle 0` 跳过，或等满 10 秒页面仍在变化，后者要检查页面是否有持续动画或轮询。
 - `--touch`：输入含触屏时加，才检查 44px 热区；不加时按页面的 `pointer: coarse` 判断。
 - 退出码 0 无告警、1 有告警、2 浏览器或页面出错（原因在 stderr）。找不到浏览器时设 `CHROME_PATH`。

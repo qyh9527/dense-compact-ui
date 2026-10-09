@@ -461,3 +461,62 @@ test('真实浏览器：--steps 跟得上整页跳转，选不了看不见或已
     assert.deepEqual(dc023((await run([{ select: '#density', value: '禁用项' }])).runs), ['选项「禁用项」已禁用']);
   });
 });
+
+test('真实浏览器：--screenshot 每份报告量取前存一张当前视口的 PNG', { timeout: STEP_TIMEOUT * 2 }, async (t) => {
+  if (!findBrowser()) {
+    t.skip(SKIP_REASON);
+    return;
+  }
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dense-shot-'));
+  t.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
+  // PNG 文件头之后是 IHDR，第 16–23 字节是宽和高。
+  const pngSize = (file) => {
+    const buf = fs.readFileSync(file);
+    assert.equal(buf.subarray(0, 8).toString('hex'), '89504e470d0a1a0a', `${file} 不是 PNG`);
+    return [buf.readUInt32BE(16), buf.readUInt32BE(20)];
+  };
+
+  await t.test('多视口 × 步骤：每个状态一张，文件名按报告顺序带序号、视口与状态，尺寸等于视口', async () => {
+    const dir = path.join(tmp, 'steps');
+    const { runs } = await runAudits({
+      target: fixture('steps-app.html'),
+      viewports: [{ width: 1280, height: 720 }, { width: 390, height: 844 }],
+      steps: JSON.parse(fs.readFileSync(fixture('steps-ok.json'), 'utf8')),
+      screenshot: dir,
+    });
+    const names = ['01-1280x720-面板展开.png', '02-1280x720-全部完成.png', '03-390x844-面板展开.png', '04-390x844-全部完成.png'];
+    assert.deepEqual(runs.map((r) => r.report.context.screenshot), names.map((n) => path.join(dir, n)));
+    assert.deepEqual(fs.readdirSync(dir).sort(), [...names].sort());
+    assert.deepEqual(pngSize(path.join(dir, names[0])), [1280, 720]);
+    assert.deepEqual(pngSize(path.join(dir, names[2])), [390, 844]);
+    assert.ok(!fs.readFileSync(path.join(dir, names[0])).equals(fs.readFileSync(path.join(dir, names[1]))), '两个状态的画面应当不同');
+  });
+
+  await t.test('配色：文件名带配色，深浅两张画面不同；不传 screenshot 时报告里没有截图路径', async () => {
+    const dir = path.join(tmp, 'theme');
+    const { runs } = await runAudits({
+      target: fixture('theme-good.html'), viewports: [{ width: 390, height: 844 }], colorSchemes: ['light', 'dark'], screenshot: dir,
+    });
+    const [light, dark] = runs.map((r) => r.report.context.screenshot);
+    assert.deepEqual([light, dark], [path.join(dir, '01-390x844-light.png'), path.join(dir, '02-390x844-dark.png')]);
+    assert.ok(!fs.readFileSync(light).equals(fs.readFileSync(dark)), '深浅两种配色的画面应当不同');
+    const plain = await runAudit({ target: fixture('clean.html') });
+    assert.equal(plain.report.context.screenshot, undefined);
+  });
+
+  await t.test('CLI：只加 --screenshot 时仍输出单份报告；目录建不了或缺参数时退出码 2', () => {
+    const dir = path.join(tmp, 'cli');
+    const result = runCli([fixture('clean.html'), '--screenshot', dir]);
+    assert.equal(result.status, 0, result.stderr);
+    const report = JSON.parse(result.stdout);
+    assert.equal(report.schema, 'dense-audit-v1');
+    assert.equal(report.context.screenshot, path.join(dir, '01-1280x720.png'));
+    assert.deepEqual(pngSize(report.context.screenshot), [1280, 720]);
+    const notDir = runCli([fixture('clean.html'), '--screenshot', fixture('clean.html')]);
+    assert.equal(notDir.status, 2);
+    assert.match(notDir.stderr, /截图目录建不了/);
+    const missing = runCli([fixture('clean.html'), '--screenshot']);
+    assert.equal(missing.status, 2);
+    assert.match(missing.stderr, /参数 --screenshot 缺少值/);
+  });
+});
