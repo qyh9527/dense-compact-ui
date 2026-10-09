@@ -329,6 +329,7 @@
  *   clip     clipX / clipY 且可见时的内框（padding box，不含滚动条）{x, y, width, height}
  *   ring     可交互且未禁用：焦点环向外伸出的估算 px（≤0 记 0，表示内描边或没有焦点环）
  *   hitBy    可交互且未禁用：中心点被别的元素盖住时，盖住它的元素的选择器；否则 null
+ *   noPointer  可交互且未禁用，但 computed pointer-events 为 none（点击会穿透）
  *   ff       带文字时 computed font-family 的第一项（规范化后） */
   function collect(win, doc, opts) {
     opts = opts || {};
@@ -483,7 +484,8 @@
       return Math.max(0, round1(Math.max(outlineExtent, shadowExtent)));
     }
 
-    /* 中心点命中测试：命中自己、后代或关联的 label 都算可点；命中祖先说明中心已被滚动容器裁到外面，不判。 */
+    /* 中心点命中测试：命中自己、后代或关联的 label 都算可点；命中祖先说明中心已被滚动容器裁到外面，不判。
+     * 浮层只豁免它盖住的浮层外控件；浮层里的控件被浮层内另一层盖住照常报。 */
     function hitTest(el, rect) {
       var cx = rect.x + rect.width / 2;
       var cy = rect.y + rect.height / 2;
@@ -492,7 +494,8 @@
       if (!h || h === el || el.contains(h) || h.contains(el)) return null;
       if (h.localName === 'label' && h.control === el) return null;
       if (el.closest('[inert],[aria-hidden="true"]')) return null;
-      if (h.closest(OVERLAY_SELECTOR)) return null;
+      var overlay = h.closest(OVERLAY_SELECTOR);
+      if (overlay && !overlay.contains(el)) return null;
       return pathOf(h);
     }
 
@@ -578,6 +581,7 @@
         clip: null,
         ring: 0,
         hitBy: null,
+        noPointer: false,
         ff: hasText ? firstFamily(cs.fontFamily) : null
       };
 
@@ -610,7 +614,9 @@
           }
           if (!rec.disabled && !outside) {
             rec.ring = focusRingOf(el, cs);
-            if (cs.pointerEvents !== 'none') rec.hitBy = hitTest(el, rect);
+            /* 看起来可用却带 pointer-events: none（含继承）：点击会穿透，同样算点不到。 */
+            if (cs.pointerEvents === 'none') rec.noPointer = !el.closest('[inert],[aria-hidden="true"]');
+            else rec.hitBy = hitTest(el, rect);
           }
         }
 
@@ -873,15 +879,19 @@
         }
       }
 
-      /* DC016 点击被拦截：可交互元素的中心点命中了别的元素 */
-      if (r.hitBy) {
+      /* DC016 点击被拦截：可交互元素的中心点命中了别的元素，或自己带 pointer-events: none */
+      if (r.inter && !r.disabled && r.noPointer) {
+        add('DC016', i, 'pointer-events: none',
+          '元素看起来可用，但 computed pointer-events 是 none（可能继承自祖先），点击会穿透。' +
+          '复核：暂时不可用时改成 disabled 或 aria-disabled，否则去掉 pointer-events: none。');
+      } else if (r.hitBy) {
         add('DC016', i, r.hitBy,
           '元素中心点被 ' + r.hitBy + ' 盖住，点击到不了它。复核：遮挡层是否该有 pointer-events: none，' +
-          '或层级、定位是否写错；对话框、菜单这类有意遮挡不在此列。');
+          '或层级、定位是否写错；对话框、菜单这类盖住外部控件的有意遮挡不在此列。');
       }
 
-      /* DC017 字体回退：按第一字体族分组，组内取第一个元素报告 */
-      if (r.ff && failedFonts[r.ff] && r.hasText) {
+      /* DC017 字体回退：按第一字体族分组，组内取第一个未忽略的元素报告；忽略的元素不计数 */
+      if (r.ff && failedFonts[r.ff] && r.hasText && !ignored(i, 'DC017')) {
         if (!fontGroups[r.ff]) fontGroups[r.ff] = { idx: i, count: 0 };
         fontGroups[r.ff].count++;
       }

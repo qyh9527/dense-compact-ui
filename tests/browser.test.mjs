@@ -222,20 +222,25 @@ test('真实浏览器：运行时探针 DC014–DC017 的坏例与好例，多�
   }
   const viewports = [{ width: 1280, height: 720 }, { width: 390, height: 844 }];
 
-  await t.test('runtime-bad.html：两个视口都各检出一条 DC014–DC017，且不改 DOM', async () => {
+  await t.test('runtime-bad.html：两个视口都检出 DC014–DC017，且不改 DOM', async () => {
     const { runs } = await runAudits({ target: fixture('runtime-bad.html'), viewports });
     assert.equal(runs.length, 2);
     runs.forEach(({ report, htmlLengthBefore, htmlLengthAfter }, k) => {
       const counts = ruleCounts(report);
       t.diagnostic(`runtime-bad ${JSON.stringify(report.context.viewport)}：${JSON.stringify(counts)} page=${JSON.stringify(report.metrics.page)}`);
       assert.deepEqual(report.context.viewport, viewports[k]);
-      for (const rule of ['DC014', 'DC015', 'DC016', 'DC017']) {
+      for (const rule of ['DC014', 'DC015', 'DC017']) {
         assert.equal(counts[rule], 1, `${rule} 应恰好一条：${JSON.stringify(counts)}`);
       }
       const by = (rule) => report.findings.find((f) => f.rule === rule);
       assert.equal(by('DC015').selector, '#flush');
       assert.equal(by('DC015').value.ring, 4, '焦点环宽度应从 :focus-visible 规则的 token 展开为 2px + 2px');
-      assert.equal(by('DC016').selector, '#covered');
+      // 页面上的透明层、对话框内部的遮挡层、自身 pointer-events: none 各一条。
+      assert.deepEqual(
+        report.findings.filter((f) => f.rule === 'DC016').map((f) => f.selector).sort(),
+        ['#covered', '#covered-in-dialog', '#no-pointer'],
+      );
+      assert.equal(report.findings.find((f) => f.selector === '#no-pointer').value, 'pointer-events: none');
       assert.deepEqual(by('DC017').value, { family: 'missing brand', count: 1 });
       assert.equal(by('DC014').value.viewport, viewports[k].width);
       assert.equal(htmlLengthAfter, htmlLengthBefore, '注入与执行不得改动 DOM');

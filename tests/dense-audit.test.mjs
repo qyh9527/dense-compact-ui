@@ -577,3 +577,25 @@ test('DC017：失败的字体没有元素在用时不报；没有页面级数据
   assert.equal(only(noPage, 'DC017').length, 0);
   assert.equal(noPage.metrics.page, undefined);
 });
+
+test('DC016：可交互且未禁用、带 pointer-events: none 时报；已禁用的不报', () => {
+  const report = run([
+    rec({ tag: 'button', seg: '#np', inter: true, noPointer: true }),
+    rec({ tag: 'button', seg: '#off', inter: true, noPointer: true, disabled: true }),
+  ]);
+  const hits = only(report, 'DC016');
+  assert.deepEqual(hits.map((f) => f.selector), ['#np']);
+  assert.equal(hits[0].value, 'pointer-events: none');
+});
+
+test('DC017：忽略只作用于带标注的元素，不压掉整组，也不计数', () => {
+  const report = run([
+    rec({ tag: 'p', seg: '#skip', hasText: true, ff: 'brand sans', ign: 'DC017', ignWhy: '品牌字体缺失时的有意回退演示' }),
+    rec({ tag: 'p', seg: '#a', hasText: true, ff: 'brand sans' }),
+    rec({ tag: 'p', hasText: true, ff: 'brand sans' }),
+  ], { page: page({ fontsFailed: ['brand sans'] }) });
+  const hits = only(report, 'DC017');
+  assert.equal(hits.length, 1);
+  assert.equal(hits[0].selector, '#a');
+  assert.deepEqual(hits[0].value, { family: 'brand sans', count: 2 });
+});

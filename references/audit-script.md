@@ -33,7 +33,7 @@ node <技能目录>/scripts/run-audit.mjs http://localhost:5173/nodes --touch --
 | DC013 | 字号或圆角不在 token 刻度上 | 是有意例外还是漂移 |
 | DC014 | 整页能横向滚动：报最外层伸出视口右边、又没被横向滚动容器或固定定位收住的元素 | 宽内容放进 `overflow-x: auto` 容器或改成换行；不要给 body 加 `overflow: hidden` 掩盖 |
 | DC015 | 焦点环被裁：可聚焦元素离 `overflow` 裁切容器内边的距离小于焦点环伸出的宽度（从页面的 `:focus` / `:focus-visible` 规则估算，没有规则按 2px） | 给容器留内边距，或贴边列表改用内描边；估算不算选择器优先级，有疑问时实际 Tab 一次看 |
-| DC016 | 点击被拦截：可交互元素中心点命中了别的元素；对话框、菜单、listbox、popover 里的遮挡不算 | 遮挡层是否该 `pointer-events: none`，层级或定位是否写错 |
+| DC016 | 点击被拦截：可交互元素中心点命中了别的元素，或自己的 computed `pointer-events` 是 none；对话框、菜单、listbox、popover 盖住它们外面的控件不算，浮层里的控件被浮层内另一层盖住照常报 | 遮挡层是否该 `pointer-events: none`，层级或定位是否写错；暂时不可用的控件改用 `disabled` / `aria-disabled` |
 | DC017 | 字体回退：页面在用的第一字体族，其 `@font-face` 文件全部加载失败；按字体族合并成一条 | `src` 路径、跨域与格式；computed `font-family` 不能证明字体生效 |
 
 `metrics` 是交付时要写出的数字：`lists` 给每个重复对象视图的项数、折叠态行高中位数和一屏完整可见项数；`accentRatio` 是强调色面积占比；`fontSizes`、`radii` 是刻度直方图；`page` 记录文档宽与视口宽、加载失败和仍在加载的字体族。改版时用同一内容、视口和状态跑前后两次对比。

@@ -58,6 +58,19 @@ button {
   position: absolute;
   inset: 0;
 }
+/* DC016：对话框里的按钮被对话框内部的另一层盖住，浮层豁免不适用。 */
+dialog.dlg {
+  position: static;
+  margin: var(--dc-space-5) 0 0;
+  padding: var(--dc-space-3);
+  border: 1px solid var(--dc-border);
+  background: var(--dc-surface);
+  color: var(--dc-text);
+}
+/* DC016：看起来可用的按钮带 pointer-events: none，点击会穿透。 */
+.no-pointer {
+  pointer-events: none;
+}
 
 /* DC017：品牌字体文件不存在，实际回退到后备字体。 */
 .brand {
@@ -74,6 +87,13 @@ button {
     <button id="covered" type="button">被盖住的按钮</button>
     <div class="cover"></div>
   </div>
+  <dialog class="dlg" open>
+    <div class="cover-wrap">
+      <button id="covered-in-dialog" type="button">对话框里被盖住的按钮</button>
+      <div class="cover"></div>
+    </div>
+  </dialog>
+  <button id="no-pointer" class="no-pointer" type="button">点击会穿透的按钮</button>
 </main>
 </body>
 </html>
