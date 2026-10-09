@@ -7,7 +7,7 @@ description: 紧凑高信息密度界面的设计、实现与评审指导：高�
 
 本文件是入口和索引：每次都做「确认 → 判读 → 按索引读参考 → 检查并贴出结果」；细则都在 references/，只读当前任务用得到的文件。
 
-审计、评审、打磨、精简或加固已有界面时，先读 [quality-workflow.md](references/quality-workflow.md) 选择路径与完成条件；只要求审计或评审时只报告，要求修复时再改文件。验收分轻度、中度、全套三档：局部小改走轻度，一个功能、共享组件或新增状态走中度，新页面、改版、全局样式和交付前走全套，用户没指定时按 quality-workflow.md 的「选验收档位」判断；轻度结论最高是 partial，不能写成验收通过。
+审计、评审、打磨、精简或加固已有界面时，先读 [quality-workflow.md](references/quality-workflow.md) 选择路径、验收档位与完成条件；只要求审计或评审时只报告，要求修复时再改文件。
 
 ## 1. 先判页面任务，再确认是否采用
 
@@ -75,7 +75,7 @@ description: 紧凑高信息密度界面的设计、实现与评审指导：高�
 | 改版已有界面、项目已有组件库 | [redesign.md](references/redesign.md) |
 | 审计、设计评审、打磨、精简、边界加固；轻度 / 中度 / 全套验收档位、验收契约、证据等级、问题优先级与复验 | [quality-workflow.md](references/quality-workflow.md) |
 | 产品事实与视觉约定分层、页面模式细则、桌面 / 原生 / 跨平台验证 | [context.md](references/context.md) |
-| Web 页面量取：行高、可见项数、强调色面积、刻度偏离、横向溢出、焦点环裁切、点击遮挡、字体与图标字体回退、破图、布局属性没生效、深浅主题残色、滚动后被固定栏挡住，多视口与深浅配色一次跑，按步骤操作到目标状态再量，各状态存截图供观感检查 | [audit-script.md](references/audit-script.md) |
+| Web 运行时量取、多视口与深浅配色、交互步骤、截图取证 | [audit-script.md](references/audit-script.md) |
 | Tailwind、shadcn、Ant Design、Element Plus、MUI 等落地密度与主题（含配置片段） | [stacks.md](references/stacks.md) |
 | 选图标库、图标尺寸、操作对应的图标 | [icons.md](references/icons.md) |
 | 动效：弹出层、展开收起、列表增删、视图切换、拖拽 | [motion.md](references/motion.md) |
@@ -89,15 +89,7 @@ description: 紧凑高信息密度界面的设计、实现与评审指导：高�
 
 ## 5. 交付前检查
 
-用真实内容逐项过 [verify.md](references/verify.md)，按判读里的形态与输入取舍检查项（规则见 verify.md 的「边界场景」）；非 Web 平台按 context.md 选验证工具。Web 页面能在浏览器里打开时，用 [audit-script.md](references/audit-script.md) 的脚本采集行高、可见项数与刻度偏离等数字。有预览时按 quality-workflow.md 的「复验与停止」集中检查、批量修复，停止前做一次观感检查。交付时把检查结果贴在回复里，每项标「预览验证 / 静态检查 / 未验证」；没贴出检查结果，不算完成。最低要求：
-
-- [ ] 长内容、200% 文字缩放、矮视口时核心任务都能完成；形态含手机时再查窄到 360px 和软键盘弹出，只用于桌面窗口时查小窗口（如 1280×720）
-- [ ] 重复对象视图量过折叠态行高、一屏可辨认的项数和内容区宽度利用（见 verify.md 的「评价方式」）
-- [ ] 选中、焦点、悬停、进行中、错误各自可辨，焦点环没被父容器裁掉
-- [ ] 输入含触屏时，常用操作实际热区约 44×44px，热区互不重叠
-- [ ] 文字对比 ≥4.5:1，必要的控件与状态线索 ≥3:1
-- [ ] 可见文案逐条重读过；没有占位式假数据，彩色圆点只表示真实状态
-- [ ] 有预览时，同一内容的前后截图并排过了观感检查（见 quality-workflow.md 的「复验与停止」）
+按 quality-workflow.md 的验收档位确定检查范围，用真实内容过 [verify.md](references/verify.md) 的相关项；非 Web 平台按 context.md 选验证工具。Web 页面能在浏览器里打开时，用 [audit-script.md](references/audit-script.md) 采集量取与截图证据。有预览时按 quality-workflow.md 的「复验与停止」集中检查、批量修复，并在停止前做观感检查。交付时贴出检查结果，每项标「预览验证 / 静态检查 / 未验证」，未覆盖项写明原因；没贴出结果，不算完成。
 
 ## 6. 交付
 
