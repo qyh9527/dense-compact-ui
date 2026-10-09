@@ -6,11 +6,13 @@
 //   node scripts/run-audit.mjs <URL 或本地 html 路径> [--touch] [--root <选择器>]
 //                              [--wait-for <选择器>] [--settle 500]
 //                              [--width 1280 --height 720] [--out report.json]
+//   多视口：用可重复的 --viewport 宽x高 代替 --width / --height，同一个浏览器里逐个视口重载并审计，
+//   输出 { schema: 'dense-audit-multi-v1', totalFindings, reports: [每个视口一份 dense-audit-v1] }。
 // --wait-for：load 之后等该选择器存在且可见（上限 60 秒，超时按出错处理）。
 // --settle：再等 DOM 连续这么多毫秒没有变化（默认 500，最多等 10 秒；0 跳过）。
 // 退出码：0 没有告警；1 有告警；2 浏览器、导航或脚本出错（原因写到 stderr）。
 //
-// 也导出 runAudit / findBrowser，供 tests/browser.test.mjs 复用同一套 CDP 逻辑。
+// 也导出 runAudit / runAudits / findBrowser，供 tests/browser.test.mjs 复用同一套 CDP 逻辑。
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -26,7 +28,8 @@ const STEP_TIMEOUT = 60_000;
 const DEFAULT_SETTLE = 500;
 const SETTLE_CAP = 10_000;
 
-// 在页面里一次完成：先轮询 waitFor（存在且可见），再等 DOM 连续 settle 毫秒没有变化。
+// 在页面里一次完成：先轮询 waitFor（存在且可见），再等 DOM 连续 settle 毫秒没有变化，
+// 最后等 document.fonts.ready（最多 5 秒），字体加载失败才能在报告里看到（DC017）。
 // 返回 { waitTimedOut, settled }；Observer 用完即 disconnect，不留 DOM 改动。
 const READY_PROBE = `(async (sel, settle, waitTimeout, settleCap) => {
   // 与 dense-audit.js 同一口径：有尺寸，且 display / visibility / opacity 都没把它藏起来。
@@ -52,7 +55,13 @@ const READY_PROBE = `(async (sel, settle, waitTimeout, settleCap) => {
       await new Promise((r) => setTimeout(r, 50));
     }
   }
-  if (!(settle > 0)) return { waitTimedOut: false, settled: false };
+  const fontsReady = () => document.fonts
+    ? Promise.race([document.fonts.ready, new Promise((r) => setTimeout(r, 5000))])
+    : null;
+  if (!(settle > 0)) {
+    await fontsReady();
+    return { waitTimedOut: false, settled: false };
+  }
   const settled = await new Promise((resolve) => {
     let quiet;
     let cap;
@@ -65,6 +74,7 @@ const READY_PROBE = `(async (sel, settle, waitTimeout, settleCap) => {
     quiet = setTimeout(() => finish(true), settle);
     cap = setTimeout(() => finish(false), settleCap);
   });
+  await fontsReady();
   return { waitTimedOut: false, settled };
 })`;
 
@@ -265,15 +275,28 @@ function toUrl(target) {
  * waitTimeoutMs 只给测试缩短超时用，命令行不暴露。
  * 失败抛出中文错误；无论成败都会杀掉浏览器进程并删除临时目录。
  */
-export async function runAudit({
-  target, touch = false, root, width = 1280, height = 720,
+export async function runAudit({ width = 1280, height = 720, ...opts } = {}) {
+  const { runs } = await runAudits({ ...opts, viewports: [{ width, height }] });
+  return runs[0];
+}
+
+/**
+ * 同一个浏览器里按 viewports 顺序逐个视口审计：每个视口先切尺寸，再重新加载页面并等就绪，
+ * 量到的是在该尺寸下首次布局的结果。返回 { runs: [{ report, htmlLengthBefore, htmlLengthAfter }] }。
+ * 其余参数与 runAudit 相同。
+ */
+export async function runAudits({
+  target, touch = false, root, viewports,
   waitFor, settle = DEFAULT_SETTLE, waitTimeoutMs = STEP_TIMEOUT,
 } = {}) {
   if (!target) throw new Error('缺少要检查的页面：请给 URL 或本地 html 路径');
+  if (!Array.isArray(viewports) || !viewports.length) throw new Error('缺少视口：viewports 至少要有一项');
   const bin = findBrowser();
   if (!bin) throw new Error('未找到 Chromium 内核浏览器：请安装 Edge 或 Chrome，或用 CHROME_PATH 指定可执行文件');
   const url = toUrl(target);
   const scriptSource = fs.readFileSync(SCRIPT_PATH, 'utf8');
+  const windowWidth = Math.max(...viewports.map((v) => v.width));
+  const windowHeight = Math.max(...viewports.map((v) => v.height));
 
   const userDataDirs = [];
   let child = null;
@@ -285,7 +308,7 @@ export async function runAudit({
     for (let attempt = 1; ; attempt++) {
       const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dense-audit-'));
       userDataDirs.push(dir);
-      const launched = await launchBrowser(bin, dir, width, height);
+      const launched = await launchBrowser(bin, dir, windowWidth, windowHeight);
       child = launched.child;
       try {
         wsUrl = await getPageWebSocketUrl(launched.port);
@@ -299,45 +322,53 @@ export async function runAudit({
     }
     cdp = await Cdp.connect(wsUrl);
     await cdp.send('Page.enable');
-    await cdp.send('Emulation.setDeviceMetricsOverride', {
-      width, height, deviceScaleFactor: 1, mobile: false,
-    });
 
-    const loaded = cdp.waitEvent('Page.loadEventFired');
-    let nav;
-    try {
-      nav = await cdp.send('Page.navigate', { url });
-    } catch (err) {
-      loaded.cancel();
-      throw err;
-    }
-    if (nav.errorText) {
-      // 导航已失败，load 事件不会再来：取消等待，立即以错误结束。
-      loaded.cancel();
-      throw new Error(`导航失败：${nav.errorText}（${url}）`);
-    }
-    await loaded;
+    const runs = [];
+    for (const [index, { width, height }] of viewports.entries()) {
+      await cdp.send('Emulation.setDeviceMetricsOverride', {
+        width, height, deviceScaleFactor: 1, mobile: false,
+      });
 
-    // load 之后 SPA 可能还在异步渲染：先等 waitFor，再等 DOM 静默，审计的才是渲染完的页面。
-    const readyStart = Date.now();
-    const probeArgs = [waitFor || null, settle, waitTimeoutMs, SETTLE_CAP].map((v) => JSON.stringify(v)).join(', ');
-    const probe = await cdp.evaluate(`${READY_PROBE}(${probeArgs})`, {
-      awaitPromise: true,
-      timeoutMs: waitTimeoutMs + SETTLE_CAP + 10_000,
-    });
-    if (probe.waitTimedOut) {
-      throw new Error(`超时（${waitTimeoutMs / 1000} 秒）：等待选择器 ${waitFor} 出现并可见（--wait-for）。请确认选择器正确，且页面确实会渲染出该元素`);
-    }
-    const ready = { waitFor: waitFor || null, settled: probe.settled, waitedMs: Date.now() - readyStart };
+      // 第一个视口导航过去；之后的视口重新加载，避免同一 URL 带 # 时变成不触发 load 的页内跳转。
+      const loaded = cdp.waitEvent('Page.loadEventFired');
+      let nav;
+      try {
+        nav = index === 0
+          ? await cdp.send('Page.navigate', { url })
+          : await cdp.send('Page.reload', {});
+      } catch (err) {
+        loaded.cancel();
+        throw err;
+      }
+      if (nav?.errorText) {
+        // 导航已失败，load 事件不会再来：取消等待，立即以错误结束。
+        loaded.cancel();
+        throw new Error(`导航失败：${nav.errorText}（${url}）`);
+      }
+      await loaded;
 
-    const htmlLengthBefore = await cdp.evaluate('document.documentElement.outerHTML.length');
-    await cdp.evaluate(scriptSource);
-    const options = { touch: touch ? true : undefined, root: root || undefined };
-    const json = await cdp.evaluate(`JSON.stringify(denseAudit(${JSON.stringify(options)}))`);
-    const htmlLengthAfter = await cdp.evaluate('document.documentElement.outerHTML.length');
-    const report = JSON.parse(json);
-    report.context.ready = ready;
-    return { report, htmlLengthBefore, htmlLengthAfter };
+      // load 之后 SPA 可能还在异步渲染：先等 waitFor，再等 DOM 静默，审计的才是渲染完的页面。
+      const readyStart = Date.now();
+      const probeArgs = [waitFor || null, settle, waitTimeoutMs, SETTLE_CAP].map((v) => JSON.stringify(v)).join(', ');
+      const probe = await cdp.evaluate(`${READY_PROBE}(${probeArgs})`, {
+        awaitPromise: true,
+        timeoutMs: waitTimeoutMs + SETTLE_CAP + 15_000,
+      });
+      if (probe.waitTimedOut) {
+        throw new Error(`超时（${waitTimeoutMs / 1000} 秒）：等待选择器 ${waitFor} 出现并可见（--wait-for）。请确认选择器正确，且页面确实会渲染出该元素`);
+      }
+      const ready = { waitFor: waitFor || null, settled: probe.settled, waitedMs: Date.now() - readyStart };
+
+      const htmlLengthBefore = await cdp.evaluate('document.documentElement.outerHTML.length');
+      await cdp.evaluate(scriptSource);
+      const options = { touch: touch ? true : undefined, root: root || undefined };
+      const json = await cdp.evaluate(`JSON.stringify(denseAudit(${JSON.stringify(options)}))`);
+      const htmlLengthAfter = await cdp.evaluate('document.documentElement.outerHTML.length');
+      const report = JSON.parse(json);
+      report.context.ready = ready;
+      runs.push({ report, htmlLengthBefore, htmlLengthAfter });
+    }
+    return { runs };
   } finally {
     if (cdp) cdp.close();
     await killBrowser(child);
@@ -345,9 +376,18 @@ export async function runAudit({
   }
 }
 
+function parseViewport(value) {
+  const m = /^(\d+)x(\d+)$/i.exec(value);
+  const width = m && Number(m[1]);
+  const height = m && Number(m[2]);
+  if (!(width > 0 && height > 0)) throw new Error(`参数 --viewport 需要 宽x高 的正整数，如 390x844，实际：${value}`);
+  return { width, height };
+}
+
 function parseArgs(argv) {
   const opts = { touch: false };
   const rest = [];
+  const viewports = [];
   const needValue = (name, i) => {
     if (i + 1 >= argv.length) throw new Error(`参数 ${name} 缺少值`);
     return argv[i + 1];
@@ -358,6 +398,7 @@ function parseArgs(argv) {
     else if (a === '--root') opts.root = needValue(a, i++);
     else if (a === '--out') opts.out = needValue(a, i++);
     else if (a === '--wait-for') opts.waitFor = needValue(a, i++);
+    else if (a === '--viewport') viewports.push(parseViewport(needValue(a, i++)));
     else if (a === '--settle') {
       const n = Number(needValue(a, i++));
       if (!Number.isInteger(n) || n < 0) throw new Error(`参数 ${a} 需要非负整数（毫秒，0 表示跳过静默等待）`);
@@ -369,7 +410,9 @@ function parseArgs(argv) {
     } else if (a.startsWith('--')) throw new Error(`未知参数：${a}`);
     else rest.push(a);
   }
-  if (rest.length !== 1) throw new Error('用法：node scripts/run-audit.mjs <URL 或本地 html 路径> [--touch] [--root <选择器>] [--wait-for <选择器>] [--settle 500] [--width 1280 --height 720] [--out report.json]');
+  if (rest.length !== 1) throw new Error('用法：node scripts/run-audit.mjs <URL 或本地 html 路径> [--touch] [--root <选择器>] [--wait-for <选择器>] [--settle 500] [--width 1280 --height 720 | --viewport 1280x720 --viewport 390x844 …] [--out report.json]');
+  if (viewports.length && (opts.width || opts.height)) throw new Error('--viewport 不能和 --width / --height 同时使用');
+  if (viewports.length) opts.viewports = viewports;
   opts.target = rest[0];
   return opts;
 }
@@ -377,11 +420,22 @@ function parseArgs(argv) {
 async function main() {
   try {
     const { out, ...opts } = parseArgs(process.argv.slice(2));
-    const { report } = await runAudit(opts);
-    const text = JSON.stringify(report, null, 2) + '\n';
+    // 传了 --viewport 就输出多视口报告：每个视口一份 dense-audit-v1；不传时输出与以前完全相同。
+    let result;
+    let total;
+    if (opts.viewports) {
+      const { runs } = await runAudits(opts);
+      const reports = runs.map((r) => r.report);
+      total = reports.reduce((sum, r) => sum + r.totalFindings, 0);
+      result = { schema: 'dense-audit-multi-v1', totalFindings: total, reports };
+    } else {
+      result = (await runAudit(opts)).report;
+      total = result.totalFindings;
+    }
+    const text = JSON.stringify(result, null, 2) + '\n';
     if (out) fs.writeFileSync(out, text);
     else process.stdout.write(text);
-    process.exitCode = report.totalFindings > 0 ? 1 : 0;
+    process.exitCode = total > 0 ? 1 : 0;
   } catch (err) {
     process.stderr.write(`dense-audit 出错：${err.message}\n`);
     process.exitCode = 2;

@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="zh-CN" class="dc-workbench" data-theme="zinc-graphite-dark">
+<head>
+<meta charset="utf-8">
+<title>运行时探针好例</title>
+<link rel="stylesheet" href="../../assets/tokens.css">
+<style>
+/* 与 runtime-bad.html 一一对应的合法写法，DC014–DC017 都不应告警。 */
+@font-face {
+  font-family: "Unused Brand";
+  src: url("./no-such-font.woff2") format("woff2");
+}
+html.dc-workbench {
+  background: var(--dc-canvas);
+  color: var(--dc-text);
+}
+body {
+  margin: 0;
+  font: var(--dc-text-body)/var(--dc-line-height) var(--dc-font-sans);
+}
+main {
+  padding: var(--dc-pane-padding);
+}
+button {
+  font: inherit;
+  height: var(--dc-control-height);
+  padding: 0 var(--dc-space-4);
+  color: var(--dc-text);
+  border: 1px solid var(--dc-border-control);
+  border-radius: var(--dc-radius-control);
+  background: transparent;
+}
+:focus-visible {
+  outline: var(--dc-focus-width) solid var(--dc-accent);
+  outline-offset: var(--dc-focus-offset);
+}
+
+/* DC014 好例：宽内容收在自己的横向滚动容器里，页面本身不横向滚动。 */
+.scroll-x {
+  overflow-x: auto;
+}
+.scroll-x .wide {
+  width: 1500px;
+  height: var(--dc-row-height);
+  border-bottom: 1px solid var(--dc-border);
+}
+
+/* DC015 好例一：裁切容器留出的内边距大于焦点环伸出的 4px。 */
+.clipbox {
+  overflow: hidden;
+  padding: var(--dc-space-3);
+  margin-top: var(--dc-space-5);
+}
+/* DC015 好例二：贴边的滚动列表改用内描边，焦点环不伸出元素。 */
+.scroller {
+  overflow: auto;
+  max-height: 120px;
+  margin-top: var(--dc-space-5);
+}
+.scroller button:focus-visible {
+  outline-offset: var(--dc-focus-offset-inset);
+}
+
+/* DC016 好例：角标只压住按钮一角；装饰层设了 pointer-events: none；非模态对话框有意盖住下面的按钮。 */
+.badge-wrap,
+.deco-wrap,
+.dialog-host {
+  position: relative;
+  display: inline-block;
+  margin-top: var(--dc-space-5);
+}
+.badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  padding: 0 var(--dc-space-2);
+  font-size: var(--dc-text-small);
+  border-radius: var(--dc-radius-full);
+  background: var(--dc-raised);
+}
+.deco {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.dialog-host {
+  width: 240px;
+  height: 80px;
+}
+.dialog-host dialog {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: var(--dc-space-3);
+  border: 1px solid var(--dc-border);
+  background: var(--dc-surface);
+  color: var(--dc-text);
+}
+
+/* DC017 好例：声明了但没有元素使用的字体，加载失败也不影响渲染。 */
+</style>
+</head>
+<body>
+<main>
+  <p>普通标题文字</p>
+  <div class="scroll-x"><div class="wide"></div></div>
+  <div class="clipbox"><button type="button">留白按钮</button></div>
+  <div class="scroller">
+    <button type="button">列表项一</button>
+    <button type="button">列表项二</button>
+  </div>
+  <span class="badge-wrap"><button type="button">消息</button><span class="badge">3</span></span>
+  <span class="deco-wrap"><button type="button">装饰层下的按钮</button><span class="deco"></span></span>
+  <div class="dialog-host">
+    <button type="button">对话框下的按钮</button>
+    <dialog open><button type="button">确定</button></dialog>
+  </div>
+</main>
+</body>
+</html>

@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="zh-CN" class="dc-workbench" data-theme="zinc-graphite-dark">
+<head>
+<meta charset="utf-8">
+<title>运行时探针坏例</title>
+<link rel="stylesheet" href="../../assets/tokens.css">
+<style>
+/* DC014–DC017 的坏例，每个区块注明要触发的规则；对应的合法写法在 runtime-good.html。 */
+@font-face {
+  font-family: "Missing Brand";
+  src: url("./no-such-font.woff2") format("woff2");
+}
+html.dc-workbench {
+  background: var(--dc-canvas);
+  color: var(--dc-text);
+}
+body {
+  margin: 0;
+  font: var(--dc-text-body)/var(--dc-line-height) var(--dc-font-sans);
+}
+main {
+  padding: var(--dc-pane-padding);
+}
+button {
+  font: inherit;
+  height: var(--dc-control-height);
+  padding: 0 var(--dc-space-4);
+  color: var(--dc-text);
+  border: 1px solid var(--dc-border-control);
+  border-radius: var(--dc-radius-control);
+  background: transparent;
+}
+:focus-visible {
+  outline: var(--dc-focus-width) solid var(--dc-accent);
+  outline-offset: var(--dc-focus-offset);
+}
+
+/* DC014：固定宽度的横条把整页撑出横向滚动。 */
+.wide {
+  width: 1500px;
+  height: var(--dc-row-height);
+  border-bottom: 1px solid var(--dc-border);
+}
+
+/* DC015：按钮贴着 overflow: hidden 容器的左边，焦点环向外 4px 会被裁掉。 */
+.clipbox {
+  overflow: hidden;
+  margin-top: var(--dc-space-5);
+}
+
+/* DC016：透明层盖在按钮上。 */
+.cover-wrap {
+  position: relative;
+  display: inline-block;
+  margin-top: var(--dc-space-5);
+}
+.cover {
+  position: absolute;
+  inset: 0;
+}
+
+/* DC017：品牌字体文件不存在，实际回退到后备字体。 */
+.brand {
+  font-family: "Missing Brand", var(--dc-font-sans);
+}
+</style>
+</head>
+<body>
+<main>
+  <p class="brand">品牌标题文字</p>
+  <div class="wide"></div>
+  <div class="clipbox"><button id="flush" type="button">贴边按钮</button></div>
+  <div class="cover-wrap">
+    <button id="covered" type="button">被盖住的按钮</button>
+    <div class="cover"></div>
+  </div>
+</main>
+</body>
+</html>
