@@ -282,3 +282,46 @@ test('真实浏览器：运行时探针 DC014–DC020 的坏例与好例，多�
     assert.match(mixed.stderr, /不能和 --width/);
   });
 });
+
+test('真实浏览器：--color-scheme 深浅两种配色下的主题残色 DC021', { timeout: STEP_TIMEOUT * 2 }, async (t) => {
+  if (!findBrowser()) {
+    t.skip(SKIP_REASON);
+    return;
+  }
+
+  await t.test('theme-bad.html：浅色下报写死的浅灰字，深色下报白色孤岛与写死的深灰字', async () => {
+    const { runs } = await runAudits({
+      target: fixture('theme-bad.html'), viewports: [{ width: 1280, height: 720 }], colorSchemes: ['light', 'dark'],
+    });
+    assert.deepEqual(runs.map((r) => r.report.context.colorScheme), ['light', 'dark']);
+    const pick = (report) => report.findings.filter((f) => f.rule === 'DC021').map((f) => [f.selector, f.value.kind]);
+    t.diagnostic(`light: ${JSON.stringify(pick(runs[0].report))} dark: ${JSON.stringify(pick(runs[1].report))}`);
+    assert.deepEqual(pick(runs[0].report), [['#hard-light-text', 'text']]);
+    assert.deepEqual(pick(runs[1].report), [['#legacy', 'surface'], ['#hard-dark-text', 'text']]);
+    for (const { report, htmlLengthBefore, htmlLengthAfter } of runs) {
+      assert.equal(report.totalFindings, report.findings.length);
+      assert.equal(htmlLengthAfter, htmlLengthBefore, '注入与执行不得改动 DOM');
+    }
+  });
+
+  await t.test('theme-good.html：颜色走主题变量、品牌色按钮、带理由忽略的固定深色代码块都不告警', async () => {
+    const { runs } = await runAudits({
+      target: fixture('theme-good.html'), viewports: [{ width: 1280, height: 720 }], colorSchemes: ['light', 'dark'],
+    });
+    for (const { report } of runs) {
+      assert.deepEqual(report.findings, [], `${report.context.colorScheme} 不应有告警：${JSON.stringify(report.findings, null, 2)}`);
+    }
+  });
+
+  await t.test('CLI：--color-scheme light,dark 输出两份报告且有告警时退出码 1；非法取值退出码 2', () => {
+    const result = runCli([fixture('theme-bad.html'), '--color-scheme', 'light,dark']);
+    assert.equal(result.status, 1, `退出码应为 1，stderr：${result.stderr}`);
+    const out = JSON.parse(result.stdout);
+    assert.equal(out.schema, 'dense-audit-multi-v1');
+    assert.deepEqual(out.reports.map((r) => [r.context.colorScheme, r.context.viewport.width]), [['light', 1280], ['dark', 1280]]);
+    assert.equal(out.totalFindings, 3);
+    const bad = runCli([fixture('theme-good.html'), '--color-scheme', 'sepia']);
+    assert.equal(bad.status, 2);
+    assert.match(bad.stderr, /--color-scheme/);
+  });
+});

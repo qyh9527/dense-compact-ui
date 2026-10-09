@@ -633,3 +633,58 @@ test('DC020：图标字符的字体族加载失败时按族合并；直接文字
   assert.deepEqual(only(report, 'DC020').map((f) => [f.selector, f.value]), [['#i1', { family: 'icons', count: 2 }]]);
   assert.deepEqual(only(report, 'DC017').map((f) => [f.selector, f.value]), [['#txt', { family: 'icons', count: 1 }]]);
 });
+
+// ---- DC021：主题残色（themeDiff 纯函数） ----
+
+const themeDiff = (a, b, ctx) => JSON.parse(JSON.stringify(sandbox.denseAuditThemeDiff(a, b, ctx)));
+const WHITE = [255, 255, 255];
+const DARK = [25, 26, 27];
+const item = (k, over = {}) => ({ k, sel: k, rect: { x: 0, y: 0, width: 100, height: 20 }, ...over });
+
+test('DC021：文字颜色写死、切到深色后对比度不足时报，记录没变的是哪一项', () => {
+  const light = { canvas: WHITE, items: [item('#t', { fg: [51, 51, 51], bg: WHITE })] };
+  const dark = { canvas: DARK, items: [item('#t', { fg: [51, 51, 51], bg: DARK })] };
+  const out = themeDiff(light, dark, { scheme: 'dark' });
+  assert.equal(out.length, 1);
+  assert.equal(out[0].rule, 'DC021');
+  assert.equal(out[0].selector, '#t');
+  assert.equal(out[0].value.kind, 'text');
+  assert.equal(out[0].value.unchanged, 'color');
+  assert.equal(out[0].value.scheme, 'dark');
+  assert.ok(out[0].value.contrast < 4.5);
+  assert.deepEqual(themeDiff(dark, light, { scheme: 'light' }), [], '反方向在浅色下达标，不报');
+});
+
+test('DC021：两种配色都跟着变、或大字达到 3:1 时不报；页面底色没切深浅时不比较', () => {
+  const light = { canvas: WHITE, items: [
+    item('#ok', { fg: [31, 35, 40], bg: WHITE }),
+    item('#big', { fg: [130, 130, 130], bg: WHITE, large: true }),
+  ] };
+  const dark = { canvas: DARK, items: [
+    item('#ok', { fg: [230, 230, 230], bg: DARK }),
+    item('#big', { fg: [130, 130, 130], bg: DARK, large: true }),
+  ] };
+  assert.deepEqual(themeDiff(light, dark, { scheme: 'dark' }), []);
+  const unchangedPage = { canvas: WHITE, items: [item('#t', { fg: [221, 221, 221], bg: WHITE })] };
+  assert.deepEqual(themeDiff(light, unchangedPage, { scheme: 'dark' }), [], '底色亮度没变，说明页面不响应配色偏好');
+});
+
+test('DC021：中性色区域没跟主题变成了局部反色时只报最外层，区域里的文字不再报；彩色品牌区不报', () => {
+  const light = { canvas: WHITE, items: [
+    item('#panel', { own: WHITE, area: 0.2 }),
+    item('#panel > p', { fg: [31, 35, 40], bg: WHITE }),
+    item('#panel > div', { own: WHITE, area: 0.05 }),
+    item('#brand', { own: [31, 111, 235], area: 0.2 }),
+    item('#tiny', { own: WHITE, area: 0.005 }),
+  ] };
+  const dark = { canvas: DARK, items: [
+    item('#panel', { own: WHITE, area: 0.2 }),
+    item('#panel > p', { fg: [230, 230, 230], bg: WHITE }),
+    item('#panel > div', { own: WHITE, area: 0.05 }),
+    item('#brand', { own: [31, 111, 235], area: 0.2 }),
+    item('#tiny', { own: WHITE, area: 0.005 }),
+  ] };
+  const out = themeDiff(light, dark, { scheme: 'dark' });
+  assert.deepEqual(out.map((f) => [f.selector, f.value.kind]), [['#panel', 'surface']]);
+  assert.equal(out[0].value.bg, 'rgb(255, 255, 255)');
+});

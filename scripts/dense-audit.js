@@ -9,6 +9,7 @@
  *   collect(win, doc, opts)    只读 DOM，产出 records（纯数据，不含页面正文文本）
  *   collectPage(win, doc)      页面级数据：文档滚动宽度、加载失败的字体族
  *   evaluate(records, ctx)     纯函数：records + ctx -> 报告，可在 Node 里单测
+ *   collectColors(win, doc)    颜色快照；themeDiff(a, b) 纯函数比较两种配色方案下的快照（DC021）
  *
  * 字体状态要等 document.fonts.ready 之后才准；run-audit.mjs 会先等，手动注入时先 await 它。
  *
@@ -312,6 +313,46 @@
     };
   }
 
+  /* 选择器片段：#id 或 tag[:nth-of-type(n)]，同一父元素下的同名兄弟一次算完。collect 与 collectColors 共用。 */
+  function makeSegOf(win) {
+    var segCache = new Map();
+
+    function escapeId(id) {
+      return win.CSS && typeof win.CSS.escape === 'function'
+        ? win.CSS.escape(id)
+        : id.replace(/([^\w-])/g, '\\$1');
+    }
+
+    function segOf(el) {
+      if (segCache.has(el)) return segCache.get(el);
+      var id = el.getAttribute('id');
+      if (id) {
+        var s = '#' + escapeId(id);
+        segCache.set(el, s);
+        return s;
+      }
+      var tag = el.localName;
+      var parent = el.parentElement;
+      var seg = tag;
+      if (parent) {
+        var same = [];
+        for (var i = 0; i < parent.children.length; i++) {
+          if (parent.children[i].localName === tag) same.push(parent.children[i]);
+        }
+        if (same.length > 1) {
+          /* 同一父元素下的同名兄弟一次性算完，避免反复扫描。 */
+          same.forEach(function (sib, k) {
+            if (!sib.getAttribute('id')) segCache.set(sib, tag + ':nth-of-type(' + (k + 1) + ')');
+          });
+          return segCache.get(el);
+        }
+      }
+      segCache.set(el, seg);
+      return seg;
+    }
+    return segOf;
+  }
+
   /* ------------------------------------------------------------------ */
   /* collect：只读 DOM，产出 records                                      */
   /* ------------------------------------------------------------------ */
@@ -358,41 +399,7 @@
 
     var normalize = makeNormalizer(win, doc);
     var records = [];
-    var segCache = new Map();
-
-    function escapeId(id) {
-      return win.CSS && typeof win.CSS.escape === 'function'
-        ? win.CSS.escape(id)
-        : id.replace(/([^\w-])/g, '\\$1');
-    }
-
-    function segOf(el) {
-      if (segCache.has(el)) return segCache.get(el);
-      var id = el.getAttribute('id');
-      if (id) {
-        var s = '#' + escapeId(id);
-        segCache.set(el, s);
-        return s;
-      }
-      var tag = el.localName;
-      var parent = el.parentElement;
-      var seg = tag;
-      if (parent) {
-        var same = [];
-        for (var i = 0; i < parent.children.length; i++) {
-          if (parent.children[i].localName === tag) same.push(parent.children[i]);
-        }
-        if (same.length > 1) {
-          /* 同一父元素下的同名兄弟一次性算完，避免反复扫描。 */
-          same.forEach(function (sib, k) {
-            if (!sib.getAttribute('id')) segCache.set(sib, tag + ':nth-of-type(' + (k + 1) + ')');
-          });
-          return segCache.get(el);
-        }
-      }
-      segCache.set(el, seg);
-      return seg;
-    }
+    var segOf = makeSegOf(win);
 
     function parsePx(value) {
       var n = parseFloat(value);
@@ -1243,6 +1250,224 @@
   }
 
   /* ------------------------------------------------------------------ */
+  /* 主题对比（DC021）：collectColors 在页面里取颜色快照，themeDiff 比较两份快照 */
+  /* ------------------------------------------------------------------ */
+
+  /* 内容自带颜色的元素，不随主题变化是正常的，不参与比较。 */
+  var MEDIA_TAGS = { img: 1, video: 1, canvas: 1, svg: 1, iframe: 1, picture: 1, object: 1, embed: 1 };
+
+  function round2(n) {
+    return Math.round(n * 100) / 100;
+  }
+
+  /* 把半透明颜色 top（[r, g, b, a]）叠到不透明的 under（[r, g, b]）上。 */
+  function blend(top, under) {
+    var a = top[3];
+    return [0, 1, 2].map(function (k) { return Math.round(top[k] * a + under[k] * (1 - a)); });
+  }
+
+  /* WCAG 相对亮度与对比度。 */
+  function luminance(rgb) {
+    var ch = [rgb[0], rgb[1], rgb[2]].map(function (v) {
+      v = v / 255;
+      return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+    });
+    return 0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2];
+  }
+
+  function contrast(a, b) {
+    var la = luminance(a);
+    var lb = luminance(b);
+    return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+  }
+
+  /* 颜色快照，只读 DOM，不含页面正文文本：
+   *   canvas  页面底色（body 的有效背景，没有就取 html）[r, g, b]
+   *   items   可见元素：k 完整路径（两次加载间对齐用）、sel 报告用的短选择器、rect；
+   *           有直接文字时 fg / bg 为叠到底色上的文字色与有效背景色，large 表示大字（门槛按 3:1）；
+   *           自身背景不透明时 own 为该色，area 为它在视口内的面积占比
+   * 背景链上遇到 background-image 时有效背景未知，跳过该元素；图片、视频、svg 等不参与。 */
+  function collectColors(win, doc, opts) {
+    opts = opts || {};
+    var rootEl = opts.root ? doc.querySelector(opts.root) : doc.documentElement;
+    if (!rootEl) {
+      throw new Error('dense-audit：找不到 root 选择器对应的元素：' + opts.root);
+    }
+    if (rootEl.querySelectorAll('*').length + 1 > MAX_NODES) {
+      throw new Error('dense-audit：root 内节点超过 ' + MAX_NODES + ' 的上限，请用 root 缩小检查范围');
+    }
+    var normalize = makeNormalizer(win, doc);
+    var segOf = makeSegOf(win);
+    var vw = win.innerWidth;
+    var vh = win.innerHeight;
+    var bgCache = new Map();
+    var pathCache = new Map();
+
+    function colorOf(str) {
+      var n = normalize(str);
+      if (!n) return null;
+      var c = parseColor(n.rgb);
+      return [c.r, c.g, c.b, n.a];
+    }
+
+    function noImage(cs) {
+      return !cs.backgroundImage || cs.backgroundImage === 'none';
+    }
+
+    /* 有效背景：自身背景叠在父元素的有效背景上；到根还没遇到不透明背景、或遇到背景图时为 null。 */
+    function effBg(el) {
+      if (bgCache.has(el)) return bgCache.get(el);
+      var cs = win.getComputedStyle(el);
+      var res = null;
+      if (noImage(cs)) {
+        var own = colorOf(cs.backgroundColor);
+        if (own && own[3] >= 0.999) res = own.slice(0, 3);
+        else {
+          var under = el.parentElement ? effBg(el.parentElement) : null;
+          if (under) res = own && own[3] > 0 ? blend(own, under) : under;
+        }
+      }
+      bgCache.set(el, res);
+      return res;
+    }
+
+    function pathOf(el) {
+      if (pathCache.has(el)) return pathCache.get(el);
+      var p = el.parentElement ? pathOf(el.parentElement) + ' > ' + segOf(el) : segOf(el);
+      pathCache.set(el, p);
+      return p;
+    }
+
+    function shortSel(el) {
+      var parts = [];
+      for (var n = el, depth = 0; n && depth < 5; n = n.parentElement, depth++) {
+        var seg = segOf(n);
+        parts.unshift(seg);
+        if (seg.charAt(0) === '#') break;
+      }
+      return parts.join(' > ');
+    }
+
+    function ignoredEl(el) {
+      for (var n = el; n; n = n.parentElement) {
+        var why = n.getAttribute('data-dc-ignore-reason');
+        if (why && why.trim() && hasToken(n.getAttribute('data-dc-ignore'), 'dc021')) return true;
+      }
+      return false;
+    }
+
+    var items = [];
+    var stack = [rootEl];
+    while (stack.length) {
+      var el = stack.pop();
+      var cs = win.getComputedStyle(el);
+      if (cs.display === 'none' || MEDIA_TAGS[el.localName]) continue;
+      for (var i = el.children.length - 1; i >= 0; i--) stack.push(el.children[i]);
+      var rect = el.getBoundingClientRect();
+      if (!(rect.width > 0 && rect.height > 0)) continue;
+      if (typeof el.checkVisibility === 'function' &&
+        !el.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })) continue;
+      if (ignoredEl(el)) continue;
+      var bg = effBg(el);
+      if (!bg) continue;
+
+      var item = null;
+      var text = false;
+      for (var n = el.firstChild; n; n = n.nextSibling) {
+        if (n.nodeType === 3 && /\S/.test(n.data)) { text = true; break; }
+      }
+      if (text) {
+        var fg = colorOf(cs.color);
+        if (fg && fg[3] > 0) {
+          var size = parseFloat(cs.fontSize) || 0;
+          var weight = parseInt(cs.fontWeight, 10) || 400;
+          item = {
+            fg: fg[3] >= 0.999 ? fg.slice(0, 3) : blend(fg, bg),
+            bg: bg,
+            large: size >= 24 || (size >= 18.66 && weight >= 700)
+          };
+        }
+      }
+      var own = colorOf(cs.backgroundColor);
+      if (own && own[3] >= 0.999 && noImage(cs)) {
+        var w = Math.max(0, Math.min(rect.right, vw) - Math.max(rect.left, 0));
+        var h = Math.max(0, Math.min(rect.bottom, vh) - Math.max(rect.top, 0));
+        var area = vw * vh > 0 ? w * h / (vw * vh) : 0;
+        if (area > 0) {
+          item = item || {};
+          item.own = own.slice(0, 3);
+          item.area = Math.round(area * 1000) / 1000;
+        }
+      }
+      if (!item) continue;
+      item.k = pathOf(el);
+      item.sel = shortSel(el);
+      item.rect = { x: round1(rect.x), y: round1(rect.y), width: round1(rect.width), height: round1(rect.height) };
+      items.push(item);
+    }
+    var canvas = (doc.body && effBg(doc.body)) || effBg(doc.documentElement);
+    return { canvas: canvas, items: items };
+  }
+
+  /* 比较同一页面在两种配色方案下的颜色快照，返回在 b 方案下出现的 DC021 发现（结构同报告 findings）。
+   * 只有页面底色亮度明显变化（确实切了深浅）时才比较；按完整路径 k 对齐两次加载的元素。
+   *   surface  自身背景两次相同、接近中性灰，在 a 下与底色同深浅、在 b 下相反：成了局部反色，只报最外层
+   *   text     在 a 下达标、在 b 下对比度不足，且文字色或背景色有一个两次完全相同：颜色写死了没跟主题
+   * 已报 surface 的区域里的元素不再报。 */
+  function themeDiff(a, b, ctx) {
+    ctx = ctx || {};
+    var out = [];
+    if (!a || !b || !a.canvas || !b.canvas) return out;
+    if (Math.abs(luminance(a.canvas) - luminance(b.canvas)) < 0.3) return out;
+    var scheme = ctx.scheme || null;
+    var byKey = {};
+    a.items.forEach(function (it) { byKey[it.k] = it; });
+    function dark(rgb) { return luminance(rgb) < 0.18; }
+    function same(x, y) { return !!x && !!y && x[0] === y[0] && x[1] === y[1] && x[2] === y[2]; }
+    function neutral(rgb) { return Math.max(rgb[0], rgb[1], rgb[2]) - Math.min(rgb[0], rgb[1], rgb[2]) <= 30; }
+    function css(rgb) { return 'rgb(' + rgb[0] + ', ' + rgb[1] + ', ' + rgb[2] + ')'; }
+    var islands = [];
+
+    b.items.forEach(function (it) {
+      var prev = byKey[it.k];
+      if (!prev) return;
+      for (var s = 0; s < islands.length; s++) {
+        if (it.k.indexOf(islands[s] + ' > ') === 0) return;
+      }
+      if (it.own && prev.own && it.area >= 0.01 && same(it.own, prev.own) && neutral(it.own) &&
+        dark(prev.own) === dark(a.canvas) && dark(it.own) !== dark(b.canvas)) {
+        islands.push(it.k);
+        out.push({
+          rule: 'DC021',
+          selector: it.sel,
+          rect: it.rect,
+          value: { scheme: scheme, kind: 'surface', bg: css(it.own), area: it.area },
+          message: '切到 ' + (scheme || '另一种配色') + ' 后这块区域仍是 ' + css(it.own) + '，和页面底色深浅相反，成了局部反色。' +
+            '复核：背景改用主题 token；确需固定颜色的内容（代码块、品牌区）用 data-dc-ignore 写明理由。'
+        });
+        return;
+      }
+      if (it.fg && prev.fg) {
+        var need = it.large ? 3 : 4.5;
+        var now = contrast(it.fg, it.bg);
+        var before = contrast(prev.fg, prev.bg);
+        var stuck = same(it.fg, prev.fg) ? 'color' : (same(it.bg, prev.bg) ? 'background' : null);
+        if (now < need && before >= need && stuck) {
+          out.push({
+            rule: 'DC021',
+            selector: it.sel,
+            rect: it.rect,
+            value: { scheme: scheme, kind: 'text', contrast: round2(now), unchanged: stuck, fg: css(it.fg), bg: css(it.bg) },
+            message: '切到 ' + (scheme || '另一种配色') + ' 后文字对比度只有 ' + round2(now) + ':1（需要 ≥' + need + ':1），' +
+              (stuck === 'color' ? '文字颜色' : '背景色') + '没有跟着主题变。复核：把写死的颜色换成主题 token。'
+          });
+        }
+      }
+    });
+    return out;
+  }
+
+  /* ------------------------------------------------------------------ */
   /* 入口                                                                */
   /* ------------------------------------------------------------------ */
 
@@ -1267,4 +1492,6 @@
 
   globalThis.denseAudit = denseAudit;
   globalThis.denseAuditEvaluate = evaluate;
+  globalThis.denseAuditColors = function (opts) { return collectColors(window, document, opts); };
+  globalThis.denseAuditThemeDiff = themeDiff;
 })();

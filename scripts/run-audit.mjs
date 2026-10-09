@@ -8,6 +8,8 @@
 //                              [--width 1280 --height 720] [--out report.json]
 //   多视口：用可重复的 --viewport 宽x高 代替 --width / --height，同一个浏览器里逐个视口重载并审计，
 //   输出 { schema: 'dense-audit-multi-v1', totalFindings, reports: [每个视口一份 dense-audit-v1] }。
+// --color-scheme light,dark：按系统深浅色偏好（prefers-color-scheme）各加载一次；给了两种时互相比较，
+//   颜色写死没跟主题变的报 DC021，记在出问题的那种配色的报告里。输出同多视口格式。
 // --wait-for：load 之后等该选择器存在且可见（上限 60 秒，超时按出错处理）。
 // --settle：再等 DOM 连续这么多毫秒没有变化（默认 500，最多等 10 秒；0 跳过）。
 // 退出码：0 没有告警；1 有告警；2 浏览器、导航或脚本出错（原因写到 stderr）。
@@ -17,6 +19,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
+import vm from 'node:vm';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -24,6 +27,9 @@ const SCRIPT_PATH = path.join(here, 'dense-audit.js');
 
 // 所有等待的上限。
 const STEP_TIMEOUT = 60_000;
+// 报告 findings 的条数上限，与 dense-audit.js 的默认值一致。
+const MAX_FINDINGS = 200;
+const COLOR_SCHEMES = ['light', 'dark'];
 // 默认的 DOM 静默窗口，以及等静默的总上限。
 const DEFAULT_SETTLE = 500;
 const SETTLE_CAP = 10_000;
@@ -280,13 +286,32 @@ export async function runAudit({ width = 1280, height = 720, ...opts } = {}) {
   return runs[0];
 }
 
+// 把页面外算出的发现并入报告：排在已有发现之后，超出上限时截断并更新计数。
+function addFindings(report, list) {
+  if (!list.length) return;
+  const room = Math.max(0, MAX_FINDINGS - report.findings.length);
+  report.findings.push(...list.slice(0, room));
+  report.totalFindings += list.length;
+  report.truncated = report.truncated || list.length > room;
+}
+
+// dense-audit.js 顶层只定义函数，在 Node 的 vm 里加载后取纯函数 themeDiff 用。
+function loadThemeDiff(source) {
+  const sandbox = {};
+  vm.createContext(sandbox);
+  vm.runInContext(source, sandbox);
+  return (a, b, ctx) => JSON.parse(JSON.stringify(sandbox.denseAuditThemeDiff(a, b, ctx)));
+}
+
 /**
  * 同一个浏览器里按 viewports 顺序逐个视口审计：每个视口先切尺寸，再重新加载页面并等就绪，
  * 量到的是在该尺寸下首次布局的结果。返回 { runs: [{ report, htmlLengthBefore, htmlLengthAfter }] }。
+ * colorSchemes（如 ['light', 'dark']）：每个视口按每种 prefers-color-scheme 各加载一次，runs 按视口、配色顺序排列；
+ * 给了两种以上时两两比较颜色快照，DC021 记在出问题的那种配色的报告里。
  * 其余参数与 runAudit 相同。
  */
 export async function runAudits({
-  target, touch = false, root, viewports,
+  target, touch = false, root, viewports, colorSchemes,
   waitFor, settle = DEFAULT_SETTLE, waitTimeoutMs = STEP_TIMEOUT,
 } = {}) {
   if (!target) throw new Error('缺少要检查的页面：请给 URL 或本地 html 路径');
@@ -295,6 +320,8 @@ export async function runAudits({
   if (!bin) throw new Error('未找到 Chromium 内核浏览器：请安装 Edge 或 Chrome，或用 CHROME_PATH 指定可执行文件');
   const url = toUrl(target);
   const scriptSource = fs.readFileSync(SCRIPT_PATH, 'utf8');
+  const schemes = colorSchemes && colorSchemes.length ? colorSchemes : [null];
+  const themeDiff = schemes.length > 1 ? loadThemeDiff(scriptSource) : null;
   const windowWidth = Math.max(...viewports.map((v) => v.width));
   const windowHeight = Math.max(...viewports.map((v) => v.height));
 
@@ -324,49 +351,78 @@ export async function runAudits({
     await cdp.send('Page.enable');
 
     const runs = [];
-    for (const [index, { width, height }] of viewports.entries()) {
+    let loads = 0;
+    for (const { width, height } of viewports) {
       await cdp.send('Emulation.setDeviceMetricsOverride', {
         width, height, deviceScaleFactor: 1, mobile: false,
       });
 
-      // 第一个视口导航过去；之后的视口重新加载，避免同一 URL 带 # 时变成不触发 load 的页内跳转。
-      const loaded = cdp.waitEvent('Page.loadEventFired');
-      let nav;
-      try {
-        nav = index === 0
-          ? await cdp.send('Page.navigate', { url })
-          : await cdp.send('Page.reload', {});
-      } catch (err) {
-        loaded.cancel();
-        throw err;
-      }
-      if (nav?.errorText) {
-        // 导航已失败，load 事件不会再来：取消等待，立即以错误结束。
-        loaded.cancel();
-        throw new Error(`导航失败：${nav.errorText}（${url}）`);
-      }
-      await loaded;
+      const group = [];
+      for (const scheme of schemes) {
+        if (scheme) {
+          await cdp.send('Emulation.setEmulatedMedia', {
+            features: [{ name: 'prefers-color-scheme', value: scheme }],
+          });
+        }
 
-      // load 之后 SPA 可能还在异步渲染：先等 waitFor，再等 DOM 静默，审计的才是渲染完的页面。
-      const readyStart = Date.now();
-      const probeArgs = [waitFor || null, settle, waitTimeoutMs, SETTLE_CAP].map((v) => JSON.stringify(v)).join(', ');
-      const probe = await cdp.evaluate(`${READY_PROBE}(${probeArgs})`, {
-        awaitPromise: true,
-        timeoutMs: waitTimeoutMs + SETTLE_CAP + 15_000,
-      });
-      if (probe.waitTimedOut) {
-        throw new Error(`超时（${waitTimeoutMs / 1000} 秒）：等待选择器 ${waitFor} 出现并可见（--wait-for）。请确认选择器正确，且页面确实会渲染出该元素`);
-      }
-      const ready = { waitFor: waitFor || null, settled: probe.settled, waitedMs: Date.now() - readyStart };
+        // 第一次导航过去；之后重新加载，避免同一 URL 带 # 时变成不触发 load 的页内跳转。
+        const loaded = cdp.waitEvent('Page.loadEventFired');
+        let nav;
+        try {
+          nav = loads++ === 0
+            ? await cdp.send('Page.navigate', { url })
+            : await cdp.send('Page.reload', {});
+        } catch (err) {
+          loaded.cancel();
+          throw err;
+        }
+        if (nav?.errorText) {
+          // 导航已失败，load 事件不会再来：取消等待，立即以错误结束。
+          loaded.cancel();
+          throw new Error(`导航失败：${nav.errorText}（${url}）`);
+        }
+        await loaded;
 
-      const htmlLengthBefore = await cdp.evaluate('document.documentElement.outerHTML.length');
-      await cdp.evaluate(scriptSource);
-      const options = { touch: touch ? true : undefined, root: root || undefined };
-      const json = await cdp.evaluate(`JSON.stringify(denseAudit(${JSON.stringify(options)}))`);
-      const htmlLengthAfter = await cdp.evaluate('document.documentElement.outerHTML.length');
-      const report = JSON.parse(json);
-      report.context.ready = ready;
-      runs.push({ report, htmlLengthBefore, htmlLengthAfter });
+        // load 之后 SPA 可能还在异步渲染：先等 waitFor，再等 DOM 静默，审计的才是渲染完的页面。
+        const readyStart = Date.now();
+        const probeArgs = [waitFor || null, settle, waitTimeoutMs, SETTLE_CAP].map((v) => JSON.stringify(v)).join(', ');
+        const probe = await cdp.evaluate(`${READY_PROBE}(${probeArgs})`, {
+          awaitPromise: true,
+          timeoutMs: waitTimeoutMs + SETTLE_CAP + 15_000,
+        });
+        if (probe.waitTimedOut) {
+          throw new Error(`超时（${waitTimeoutMs / 1000} 秒）：等待选择器 ${waitFor} 出现并可见（--wait-for）。请确认选择器正确，且页面确实会渲染出该元素`);
+        }
+        const ready = { waitFor: waitFor || null, settled: probe.settled, waitedMs: Date.now() - readyStart };
+
+        const htmlLengthBefore = await cdp.evaluate('document.documentElement.outerHTML.length');
+        await cdp.evaluate(scriptSource);
+        const options = { touch: touch ? true : undefined, root: root || undefined };
+        const json = await cdp.evaluate(`JSON.stringify(denseAudit(${JSON.stringify(options)}))`);
+        const htmlLengthAfter = await cdp.evaluate('document.documentElement.outerHTML.length');
+        const report = JSON.parse(json);
+        report.context.ready = ready;
+        if (scheme) report.context.colorScheme = scheme;
+        const run = { report, htmlLengthBefore, htmlLengthAfter };
+        if (themeDiff) {
+          const colorOptions = JSON.stringify({ root: root || undefined });
+          run.colors = JSON.parse(await cdp.evaluate(`JSON.stringify(denseAuditColors(${colorOptions}))`));
+        }
+        group.push(run);
+      }
+
+      // 同一视口下两两比较配色方案：b 相对 a 出现的问题记在 b 的报告里。
+      if (themeDiff) {
+        for (const [j, run] of group.entries()) {
+          for (const [i, base] of group.entries()) {
+            if (i !== j) addFindings(run.report, themeDiff(base.colors, run.colors, { scheme: schemes[j] }));
+          }
+        }
+      }
+      for (const run of group) {
+        delete run.colors;
+        runs.push(run);
+      }
     }
     return { runs };
   } finally {
@@ -388,6 +444,7 @@ function parseArgs(argv) {
   const opts = { touch: false };
   const rest = [];
   const viewports = [];
+  const schemes = [];
   const needValue = (name, i) => {
     if (i + 1 >= argv.length) throw new Error(`参数 ${name} 缺少值`);
     return argv[i + 1];
@@ -399,6 +456,12 @@ function parseArgs(argv) {
     else if (a === '--out') opts.out = needValue(a, i++);
     else if (a === '--wait-for') opts.waitFor = needValue(a, i++);
     else if (a === '--viewport') viewports.push(parseViewport(needValue(a, i++)));
+    else if (a === '--color-scheme') {
+      for (const v of needValue(a, i++).split(',').map((x) => x.trim()).filter(Boolean)) {
+        if (!COLOR_SCHEMES.includes(v)) throw new Error(`参数 --color-scheme 只接受 light、dark，实际：${v}`);
+        if (!schemes.includes(v)) schemes.push(v);
+      }
+    }
     else if (a === '--settle') {
       const n = Number(needValue(a, i++));
       if (!Number.isInteger(n) || n < 0) throw new Error(`参数 ${a} 需要非负整数（毫秒，0 表示跳过静默等待）`);
@@ -410,9 +473,10 @@ function parseArgs(argv) {
     } else if (a.startsWith('--')) throw new Error(`未知参数：${a}`);
     else rest.push(a);
   }
-  if (rest.length !== 1) throw new Error('用法：node scripts/run-audit.mjs <URL 或本地 html 路径> [--touch] [--root <选择器>] [--wait-for <选择器>] [--settle 500] [--width 1280 --height 720 | --viewport 1280x720 --viewport 390x844 …] [--out report.json]');
+  if (rest.length !== 1) throw new Error('用法：node scripts/run-audit.mjs <URL 或本地 html 路径> [--touch] [--root <选择器>] [--wait-for <选择器>] [--settle 500] [--width 1280 --height 720 | --viewport 1280x720 --viewport 390x844 …] [--color-scheme light,dark] [--out report.json]');
   if (viewports.length && (opts.width || opts.height)) throw new Error('--viewport 不能和 --width / --height 同时使用');
   if (viewports.length) opts.viewports = viewports;
+  if (schemes.length) opts.colorSchemes = schemes;
   opts.target = rest[0];
   return opts;
 }
@@ -420,11 +484,12 @@ function parseArgs(argv) {
 async function main() {
   try {
     const { out, ...opts } = parseArgs(process.argv.slice(2));
-    // 传了 --viewport 就输出多视口报告：每个视口一份 dense-audit-v1；不传时输出与以前完全相同。
+    // 传了 --viewport 或 --color-scheme 就输出多份报告：每个视口、每种配色一份 dense-audit-v1；都不传时输出与以前完全相同。
     let result;
     let total;
-    if (opts.viewports) {
-      const { runs } = await runAudits(opts);
+    if (opts.viewports || opts.colorSchemes) {
+      const { width = 1280, height = 720, ...rest } = opts;
+      const { runs } = await runAudits({ ...rest, viewports: opts.viewports || [{ width, height }] });
       const reports = runs.map((r) => r.report);
       total = reports.reduce((sum, r) => sum + r.totalFindings, 0);
       result = { schema: 'dense-audit-multi-v1', totalFindings: total, reports };
