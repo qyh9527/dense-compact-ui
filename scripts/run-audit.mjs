@@ -536,11 +536,19 @@ function loadThemeDiff(source) {
   return (a, b, ctx) => JSON.parse(JSON.stringify(sandbox.denseAuditThemeDiff(a, b, ctx)));
 }
 
-// --screenshot 的文件名：序号-视口[-配色][-状态].png，序号与报告顺序一致；状态名里文件名不能用的字符换成 _。
+// --screenshot 的文件名：序号-视口[-配色][-状态].png，序号与报告顺序一致；状态名里文件名不能用的字符换成 _，
+// 再按 UTF-8 截到 120 字节（约 40 个汉字或 30 个 emoji），整个文件名远低于常见文件系统单段 255 字节的上限。
 export function screenshotName(index, { width, height }, scheme, state) {
   const parts = [String(index).padStart(2, '0'), `${width}x${height}`];
   if (scheme) parts.push(scheme);
-  const label = [...String(state || '').replace(/[<>:"/\x5c|?*\u0000-\u001f]/g, '_').replace(/\s+/g, ' ')].slice(0, 60).join('').trim();
+  let label = '';
+  let bytes = 0;
+  for (const ch of String(state || '').replace(/[<>:"/\x5c|?*\u0000-\u001f]/g, '_').replace(/\s+/g, ' ')) {
+    bytes += Buffer.byteLength(ch);
+    if (bytes > 120) break;
+    label += ch;
+  }
+  label = label.trim();
   if (label) parts.push(label);
   return `${parts.join('-')}.png`;
 }
