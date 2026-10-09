@@ -35,6 +35,9 @@ node <技能目录>/scripts/run-audit.mjs http://localhost:5173/nodes --touch --
 | DC015 | 焦点环被裁：可聚焦元素离 `overflow` 裁切容器内边的距离小于焦点环伸出的宽度（从页面的 `:focus` / `:focus-visible` 规则估算，没有规则按 2px） | 给容器留内边距，或贴边列表改用内描边；估算不算选择器优先级，有疑问时实际 Tab 一次看 |
 | DC016 | 点击被拦截：可交互元素中心点命中了别的元素，或自己的 computed `pointer-events` 是 none；对话框、菜单、listbox、popover 盖住它们外面的控件不算，浮层里的控件被浮层内另一层盖住照常报 | 遮挡层是否该 `pointer-events: none`，层级或定位是否写错；暂时不可用的控件改用 `disabled` / `aria-disabled` |
 | DC017 | 字体回退：页面在用的第一字体族，其 `@font-face` 文件全部加载失败；按字体族合并成一条 | `src` 路径、跨域与格式；computed `font-family` 不能证明字体生效 |
+| DC018 | 破图：`img` 请求已结束却没有像素，按地址合并（报告里去掉查询串）；塌成 0×0 的也算，懒加载还没触发的不算 | 资源路径、跨域与响应格式；页面加载后才插入的图片要等它请求结束再量 |
+| DC019 | 布局属性没生效：写了 `gap`、`align-items`、`justify-content`、`flex-direction`、`grid-template-*` 等非默认值，但当前 `display` 不是 flex / grid（多列布局的 `column-gap` 除外） | 是否被别的规则或断点改掉了 `display`；有意在这个视口换布局时删掉这些属性 |
+| DC020 | 图标字体丢失：直接文字或 `::before` / `::after` 里的私有区字符，所用字体族加载失败；按字体族合并 | 图标字体的 `@font-face` 路径；用连字写的图标（如 `home`）回退后显示成单词，归 DC017 |
 
 `metrics` 是交付时要写出的数字：`lists` 给每个重复对象视图的项数、折叠态行高中位数和一屏完整可见项数；`accentRatio` 是强调色面积占比；`fontSizes`、`radii` 是刻度直方图；`page` 记录文档宽与视口宽、加载失败和仍在加载的字体族。改版时用同一内容、视口和状态跑前后两次对比。
 

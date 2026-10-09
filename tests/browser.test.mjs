@@ -215,21 +215,21 @@ test('真实浏览器：dense-audit.js 对 fixture 的检出', { timeout: STEP_T
   });
 });
 
-test('真实浏览器：运行时探针 DC014–DC017 的坏例与好例，多视口', { timeout: STEP_TIMEOUT * 2 }, async (t) => {
+test('真实浏览器：运行时探针 DC014–DC020 的坏例与好例，多视口', { timeout: STEP_TIMEOUT * 2 }, async (t) => {
   if (!findBrowser()) {
     t.skip(SKIP_REASON);
     return;
   }
   const viewports = [{ width: 1280, height: 720 }, { width: 390, height: 844 }];
 
-  await t.test('runtime-bad.html：两个视口都检出 DC014–DC017，且不改 DOM', async () => {
+  await t.test('runtime-bad.html：两个视口都检出 DC014–DC020，且不改 DOM', async () => {
     const { runs } = await runAudits({ target: fixture('runtime-bad.html'), viewports });
     assert.equal(runs.length, 2);
     runs.forEach(({ report, htmlLengthBefore, htmlLengthAfter }, k) => {
       const counts = ruleCounts(report);
       t.diagnostic(`runtime-bad ${JSON.stringify(report.context.viewport)}：${JSON.stringify(counts)} page=${JSON.stringify(report.metrics.page)}`);
       assert.deepEqual(report.context.viewport, viewports[k]);
-      for (const rule of ['DC014', 'DC015', 'DC017']) {
+      for (const rule of ['DC014', 'DC015', 'DC017', 'DC018', 'DC019', 'DC020']) {
         assert.equal(counts[rule], 1, `${rule} 应恰好一条：${JSON.stringify(counts)}`);
       }
       const by = (rule) => report.findings.find((f) => f.rule === rule);
@@ -242,12 +242,20 @@ test('真实浏览器：运行时探针 DC014–DC017 的坏例与好例，多�
       );
       assert.equal(report.findings.find((f) => f.selector === '#no-pointer').value, 'pointer-events: none');
       assert.deepEqual(by('DC017').value, { family: 'missing brand', count: 1 });
+      // 三张同一地址的破图合并成一条，含 0×0 的那张；报告里不带查询串。
+      assert.equal(by('DC018').selector, '#broken-1');
+      assert.equal(by('DC018').value.count, 3);
+      assert.ok(by('DC018').value.src.endsWith('/no-such-image.png'), by('DC018').value.src);
+      assert.equal(by('DC019').selector, '#dead-toolbar');
+      assert.deepEqual(by('DC019').value, { display: 'block', props: ['gap: 8px', 'align-items: center'] });
+      assert.equal(by('DC020').selector, '#dead-icon');
+      assert.deepEqual(by('DC020').value, { family: 'missing icons', count: 1 });
       assert.equal(by('DC014').value.viewport, viewports[k].width);
       assert.equal(htmlLengthAfter, htmlLengthBefore, '注入与执行不得改动 DOM');
     });
   });
 
-  await t.test('runtime-good.html：横向滚动容器、内描边、角标、装饰层、非模态对话框、未使用的字体都不告警', async () => {
+  await t.test('runtime-good.html：横向滚动容器、内描边、角标、装饰层、非模态对话框、未使用的字体、懒加载图片、多列间距都不告警', async () => {
     const { runs } = await runAudits({ target: fixture('runtime-good.html'), viewports });
     for (const { report } of runs) {
       assert.deepEqual(report.findings, [], `${JSON.stringify(report.context.viewport)} 不应有告警：${JSON.stringify(report.findings, null, 2)}`);

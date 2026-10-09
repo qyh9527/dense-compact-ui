@@ -599,3 +599,37 @@ test('DC017：忽略只作用于带标注的元素，不压掉整组，也不计
   assert.equal(hits[0].selector, '#a');
   assert.deepEqual(hits[0].value, { family: 'brand sans', count: 2 });
 });
+
+test('DC018：破图按地址合并，0×0 不可见的破图也计入；忽略的不计数', () => {
+  const report = run([
+    rec({ tag: 'img', seg: '#a', imgFail: 'https://cdn.example/a.png' }),
+    rec({ tag: 'img', imgFail: 'https://cdn.example/a.png', vis: false, rect: { x: 0, y: 0, width: 0, height: 0 } }),
+    rec({ tag: 'img', imgFail: 'https://cdn.example/a.png', ign: 'DC018', ignWhy: '占位演示' }),
+    rec({ tag: 'img', seg: '#b', imgFail: 'https://cdn.example/b.png' }),
+  ]);
+  const hits = only(report, 'DC018');
+  assert.deepEqual(hits.map((f) => [f.selector, f.value]), [
+    ['#a', { src: 'https://cdn.example/a.png', count: 2 }],
+    ['#b', { src: 'https://cdn.example/b.png', count: 1 }],
+  ]);
+});
+
+test('DC019：deadLayout 原样报出；没有时不报', () => {
+  const dead = { display: 'block', props: ['gap: 8px', 'align-items: center'] };
+  const report = run([rec({ seg: '#bar', deadLayout: dead }), rec({ seg: '#ok' })]);
+  const hits = only(report, 'DC019');
+  assert.deepEqual(hits.map((f) => f.selector), ['#bar']);
+  assert.deepEqual(hits[0].value, dead);
+  assert.match(hits[0].message, /gap: 8px、align-items: center/);
+});
+
+test('DC020：图标字符的字体族加载失败时按族合并；直接文字就是图标的元素不再计入 DC017', () => {
+  const report = run([
+    rec({ tag: 'i', seg: '#i1', hasText: true, ff: 'icons', icon: 'icons', iconText: true }),
+    rec({ tag: 'span', seg: '#i2', icon: 'icons' }),
+    rec({ tag: 'span', icon: 'system-ui' }),
+    rec({ tag: 'p', seg: '#txt', hasText: true, ff: 'icons' }),
+  ], { page: page({ fontsFailed: ['icons'] }) });
+  assert.deepEqual(only(report, 'DC020').map((f) => [f.selector, f.value]), [['#i1', { family: 'icons', count: 2 }]]);
+  assert.deepEqual(only(report, 'DC017').map((f) => [f.selector, f.value]), [['#txt', { family: 'icons', count: 1 }]]);
+});

@@ -85,6 +85,10 @@
   var DEFAULT_RING = 2;
   /* 页面滚动由视口承担，html / body 的 overflow 会传给视口，不算裁切容器。 */
   var VIEWPORT_TAGS = { html: 1, body: 1 };
+  /* 让对齐、间距、方向类属性生效的 display（DC019）。 */
+  var FLEX_GRID = { flex: 1, 'inline-flex': 1, grid: 1, 'inline-grid': 1 };
+  /* Unicode 私有区字符：图标字体常把图标放在这里（DC020）。含 U+E000–U+F8FF 与补充私有区 A / B。 */
+  var PUA = /[\uE000-\uF8FF]|[\uDB80-\uDBFF][\uDC00-\uDFFF]/;
 
   /* ------------------------------------------------------------------ */
   /* 通用小工具                                                          */
@@ -152,6 +156,13 @@
     var n = a.length;
     if (!n) return 0;
     return n % 2 ? a[(n - 1) / 2] : (a[n / 2 - 1] + a[n / 2]) / 2;
+  }
+
+  /* 报告里的资源地址去掉查询串和 # 片段，避免带出令牌；data: 地址只留类型。 */
+  function cleanUrl(u) {
+    u = String(u || '');
+    if (/^data:/i.test(u)) return u.slice(0, Math.max(5, u.search(/[;,]/)));
+    return u.split(/[?#]/)[0];
   }
 
   /* 字体族名规范化：去引号、去首尾空白、转小写。传入 font-family 列表时只取第一项。 */
@@ -330,7 +341,10 @@
  *   ring     可交互且未禁用：焦点环向外伸出的估算 px（≤0 记 0，表示内描边或没有焦点环）
  *   hitBy    可交互且未禁用：中心点被别的元素盖住时，盖住它的元素的选择器；否则 null
  *   noPointer  可交互且未禁用，但 computed pointer-events 为 none（点击会穿透）
- *   ff       带文字时 computed font-family 的第一项（规范化后） */
+ *   ff       带文字时 computed font-family 的第一项（规范化后）
+ *   imgFail  img 请求已结束却没有像素（破图）时的地址（去掉查询串），否则 null；0×0 的破图也记
+ *   deadLayout  {display, props}：写了 gap、对齐、方向等属性，但当前 display 不让它们生效
+ *   icon / iconText   直接文字或 ::before / ::after 内容含私有区字符时，渲染它的第一字体族；iconText 表示来自直接文字 */
   function collect(win, doc, opts) {
     opts = opts || {};
     var rootEl = opts.root ? doc.querySelector(opts.root) : doc.documentElement;
@@ -484,6 +498,51 @@
       return Math.max(0, round1(Math.max(outlineExtent, shadowExtent)));
     }
 
+    /* 写了只对 flex / grid（gap 还有多列）生效的属性，但 display 不是它们。只记非默认值；
+     * 按钮等控件的 UA 默认 align-items: flex-start 属于默认值，不记。 */
+    function deadLayoutOf(cs) {
+      var d = cs.display;
+      if (FLEX_GRID[d] || d === 'none' || d === 'contents') return null;
+      var props = [];
+      var multicol = cs.columnCount !== 'auto' || cs.columnWidth !== 'auto';
+      var rowGap = parsePx(cs.rowGap) > 0;
+      var colGap = !multicol && parsePx(cs.columnGap) > 0;
+      if (rowGap && colGap && cs.rowGap === cs.columnGap) props.push('gap: ' + cs.rowGap);
+      else {
+        if (rowGap) props.push('row-gap: ' + cs.rowGap);
+        if (colGap) props.push('column-gap: ' + cs.columnGap);
+      }
+      if (['normal', 'stretch', 'start', 'flex-start'].indexOf(cs.alignItems) < 0) props.push('align-items: ' + cs.alignItems);
+      if (['normal', 'start', 'flex-start'].indexOf(cs.justifyContent) < 0) props.push('justify-content: ' + cs.justifyContent);
+      if (cs.flexDirection && cs.flexDirection !== 'row') props.push('flex-direction: ' + cs.flexDirection);
+      if (cs.flexWrap && cs.flexWrap !== 'nowrap') props.push('flex-wrap: ' + cs.flexWrap);
+      if (cs.gridTemplateColumns && cs.gridTemplateColumns !== 'none') props.push('grid-template-columns: ' + cs.gridTemplateColumns);
+      if (cs.gridTemplateRows && cs.gridTemplateRows !== 'none') props.push('grid-template-rows: ' + cs.gridTemplateRows);
+      return props.length ? { display: d, props: props } : null;
+    }
+
+    /* 直接文字或 ::before / ::after 的 content 含私有区字符时，记下渲染它的第一字体族。 */
+    function iconOf(el, cs, rec) {
+      var text = '';
+      for (var n = el.firstChild; n; n = n.nextSibling) {
+        if (n.nodeType === 3) text += n.data;
+      }
+      if (PUA.test(text)) {
+        rec.icon = firstFamily(cs.fontFamily);
+        rec.iconText = true;
+        return;
+      }
+      var pseudos = ['::before', '::after'];
+      for (var k = 0; k < pseudos.length; k++) {
+        var ps = win.getComputedStyle(el, pseudos[k]);
+        var content = ps.content;
+        if (content && content !== 'none' && content !== 'normal' && PUA.test(content)) {
+          rec.icon = firstFamily(ps.fontFamily);
+          return;
+        }
+      }
+    }
+
     /* 中心点命中测试：命中自己、后代或关联的 label 都算可点；命中祖先说明中心已被滚动容器裁到外面，不判。
      * 浮层只豁免它盖住的浮层外控件；浮层里的控件被浮层内另一层盖住照常报。 */
     function hitTest(el, rect) {
@@ -582,8 +641,21 @@
         ring: 0,
         hitBy: null,
         noPointer: false,
-        ff: hasText ? firstFamily(cs.fontFamily) : null
+        ff: hasText ? firstFamily(cs.fontFamily) : null,
+        imgFail: null,
+        deadLayout: null,
+        icon: null,
+        iconText: false
       };
+
+      /* 请求已结束（懒加载还没请求时 complete 为 false）却没有像素；破图可能塌成 0×0，所以不要求有尺寸。 */
+      if (tag === 'img' && !outside) {
+        var src = el.currentSrc || el.getAttribute('src') || '';
+        var shown = typeof el.checkVisibility === 'function'
+          ? el.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })
+          : cs.visibility === 'visible';
+        if (src && shown && el.complete && el.naturalWidth === 0) rec.imgFail = cleanUrl(src);
+      }
 
       var bg = normalize(cs.backgroundColor);
       if (bg && bg.a >= 0.999) rec.bg = bg.rgb;
@@ -604,6 +676,8 @@
           return parsePx(cs['border' + side + 'Width']) > 0 && cs['border' + side + 'Style'] !== 'none';
         });
         rec.shadow = !!cs.boxShadow && cs.boxShadow !== 'none';
+        rec.deadLayout = deadLayoutOf(cs);
+        iconOf(el, cs, rec);
 
         rec.inter = el.matches(INTERACTIVE_SELECTOR);
         if (rec.inter) {
@@ -717,7 +791,7 @@
     records.forEach(function (r) { if (!r.outside) subjects++; });
 
     var order = ['DC001', 'DC003', 'DC005', 'DC007', 'DC008', 'DC010', 'DC012', 'DC013',
-      'DC014', 'DC015', 'DC016', 'DC017'];
+      'DC014', 'DC015', 'DC016', 'DC017', 'DC018', 'DC019', 'DC020'];
     var buckets = {};
     order.forEach(function (id) { buckets[id] = []; });
 
@@ -837,6 +911,15 @@
     var failedFonts = {};
     if (page) (page.fontsFailed || []).forEach(function (f) { failedFonts[f] = true; });
     var fontGroups = {};
+    var iconGroups = {};
+    var imgGroups = {};
+
+    /* 按 key 分组计数，组内取第一个未忽略的元素报告；忽略的元素不计数。 */
+    function group(groups, key, i, rule) {
+      if (ignored(i, rule)) return;
+      if (!groups[key]) groups[key] = { idx: i, count: 0 };
+      groups[key].count++;
+    }
 
     /* 横向能裁住后代的容器（html / body 的 overflow 传给视口，不算），或固定定位（不撑开文档）。 */
     function containsX(anc) {
@@ -844,10 +927,23 @@
     }
 
     records.forEach(function (r, i) {
-      if (r.outside || !r.vis) return;
+      if (r.outside) return;
+      /* DC018 破图：按地址合并；0×0 的破图看不见也要报，所以放在可见性过滤之前 */
+      if (r.imgFail) group(imgGroups, r.imgFail, i, 'DC018');
+      if (!r.vis) return;
       var tag = r.tag;
       var droles = r.drole || '';
       var isCell = !!(CELL_TAGS[tag] || BODY_ROLES[r.role]);
+
+      /* DC019 布局属性没生效 */
+      if (r.deadLayout) {
+        add('DC019', i, r.deadLayout,
+          'display 是 ' + r.deadLayout.display + '，这些属性不生效：' + r.deadLayout.props.join('、') + '。' +
+          '复核：是否该是 flex / grid（可能被别的规则或断点改掉了 display）；有意在这个视口改成别的布局时删掉这些属性。');
+      }
+
+      /* DC020 图标字体丢失：私有区字符的字体族加载失败，图标会显示成方块或乱码 */
+      if (r.icon && failedFonts[r.icon]) group(iconGroups, r.icon, i, 'DC020');
 
       /* DC014 页面级意外横向溢出：只报最外层伸出视口右边、且没被横向容器收住的元素 */
       if (pageOverflow && r.pos !== 'fixed' && r.rect.x + r.rect.width > pageLimit + 1 &&
@@ -890,11 +986,8 @@
           '或层级、定位是否写错；对话框、菜单这类盖住外部控件的有意遮挡不在此列。');
       }
 
-      /* DC017 字体回退：按第一字体族分组，组内取第一个未忽略的元素报告；忽略的元素不计数 */
-      if (r.ff && failedFonts[r.ff] && r.hasText && !ignored(i, 'DC017')) {
-        if (!fontGroups[r.ff]) fontGroups[r.ff] = { idx: i, count: 0 };
-        fontGroups[r.ff].count++;
-      }
+      /* DC017 字体回退：按第一字体族分组；直接文字就是图标字符的元素归 DC020，不重复计 */
+      if (r.ff && failedFonts[r.ff] && r.hasText && !r.iconText) group(fontGroups, r.ff, i, 'DC017');
 
       /* DC001 字号过小 */
       if (r.hasText) {
@@ -1014,6 +1107,22 @@
       add('DC017', g.idx, { family: fam, count: g.count },
         '字体族「' + fam + '」的字体文件加载失败，' + g.count + ' 个带文字的元素实际回退到了后备字体。' +
         '复核：@font-face 的 src 路径、跨域与格式；computed font-family 不能证明字体真的生效。');
+    });
+
+    /* DC018 */
+    Object.keys(imgGroups).sort().forEach(function (src) {
+      var g = imgGroups[src];
+      add('DC018', g.idx, { src: src, count: g.count },
+        '图片 ' + src + ' 请求结束了却没有像素（地址错误、跨域或格式不支持），' + g.count + ' 处使用。' +
+        '复核：资源路径与响应；懒加载还没触发的图片不在此列。');
+    });
+
+    /* DC020 */
+    Object.keys(iconGroups).sort().forEach(function (fam) {
+      var g = iconGroups[fam];
+      add('DC020', g.idx, { family: fam, count: g.count },
+        '图标字体「' + fam + '」加载失败，' + g.count + ' 个图标会显示成方块或乱码。' +
+        '复核：图标字体的 @font-face 路径；图标按钮另有可访问名称时，文字说明不受影响。');
     });
 
     /* DC012：同组多于一个，每个都告警 */
