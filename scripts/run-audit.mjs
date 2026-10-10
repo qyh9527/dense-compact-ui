@@ -24,7 +24,7 @@
 // 退出码：0 没有告警；1 有告警；2 浏览器、导航或脚本出错（原因写到 stderr）。
 //
 // 也导出 runAudit / runAudits / checkSteps / screenshotName / findBrowser / browserCandidates / browserMissingMessage /
-// parseAttach / launchBrowser / killBrowser，供测试复用同一套 CDP 逻辑与浏览器查找。
+// parseAttach / launchBrowser / killBrowser / removeDir，供测试复用同一套 CDP 逻辑、浏览器查找与临时目录清理。
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -198,7 +198,7 @@ export async function killBrowser(child) {
   clearTimeout(timer);
 }
 
-async function removeDir(dir) {
+export async function removeDir(dir) {
   // Windows 下进程刚退出时目录可能还被占用，短暂重试。
   for (let attempt = 0; attempt < 15; attempt++) {
     try {
@@ -323,7 +323,10 @@ export function parseAttach(value) {
   } catch {
     throw new Error(`参数 --attach 需要调试端口或 http://127.0.0.1:端口，实际：${value}`);
   }
-  if (u.protocol !== 'http:' || !u.port || (u.pathname !== '/' && u.pathname !== '')) {
+  // 端口须是 1–65535；带查询、片段或用户名密码的地址不是调试端口的入口，一律拒绝。
+  const port = Number(u.port);
+  if (u.protocol !== 'http:' || !u.port || port < 1 || port > 65535 || (u.pathname !== '/' && u.pathname !== '') ||
+    u.search || u.hash || u.username || u.password) {
     throw new Error(`参数 --attach 需要调试端口或 http://127.0.0.1:端口，实际：${value}`);
   }
   if (!['127.0.0.1', 'localhost', '[::1]'].includes(u.hostname)) {
@@ -334,19 +337,31 @@ export function parseAttach(value) {
 
 // 列出调试端口上的页面目标，按 match（URL 或标题片段）选出唯一一个；选不出时说明原因与可选项。
 async function findAttachPage(endpoint, match) {
-  let targets;
+  let response;
   try {
-    const response = await fetch(`${endpoint}/json/list`, { signal: AbortSignal.timeout(10_000) });
-    targets = await response.json();
+    response = await fetch(`${endpoint}/json/list`, { signal: AbortSignal.timeout(10_000), redirect: 'error' });
   } catch (err) {
+    // 重定向也在这里抛出：调试端口的 /json/list 不会重定向，归到「不像是调试端口」。
+    if (/unexpected redirect/.test(err?.cause?.message || '')) {
+      throw new Error(`${endpoint} 不像是 Chromium 远程调试端口（/json/list：返回了重定向）`);
+    }
     throw new Error(`连不上调试端口 ${endpoint}（${err?.cause?.message || err.message}）。确认应用开着远程调试：` +
       'Electron 用 --remote-debugging-port=<端口> 启动；Windows Tauri / WebView2 在应用创建 WebView 时的附加浏览器参数里加 ' +
       '--remote-debugging-port=<端口>（Tauri 窗口配置的 additionalBrowserArgs），宿主不以管理员身份运行时也可在启动前设环境变量 ' +
       'WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=<端口>');
   }
-  const describe = (list) => list.map((t) => `${t.url}${t.title ? `（${t.title}）` : ''}`).join('；') || '无';
-  const pages = targets.filter((t) => t.type === 'page' && !/^devtools:/.test(t.url));
-  const hits = match ? pages.filter((t) => t.url.includes(match) || (t.title || '').includes(match)) : pages;
+  // 端口通了但不是 CDP 端点（HTTP 错误、不是 JSON、不是目标列表）：单独报，别误导成「没开调试」。
+  let targets;
+  try {
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    targets = await response.json();
+    if (!Array.isArray(targets)) throw new Error('返回的不是目标列表');
+  } catch (err) {
+    throw new Error(`${endpoint} 不像是 Chromium 远程调试端口（/json/list：${err.message}）`);
+  }
+  const describe = (list) => list.map((t) => `${t.url || ''}${t.title ? `（${t.title}）` : ''}`).join('；') || '无';
+  const pages = targets.filter((t) => t.type === 'page' && !/^devtools:/.test(t.url || ''));
+  const hits = match ? pages.filter((t) => (t.url || '').includes(match) || (t.title || '').includes(match)) : pages;
   if (hits.length === 1) {
     if (!hits[0].webSocketDebuggerUrl) throw new Error(`页面 ${describe(hits)} 没有提供调试连接地址，可能已有别的调试器连着它`);
     return hits[0];
@@ -637,7 +652,7 @@ export function screenshotName(index, { width, height }, scheme, state) {
  * 给了两种以上时两两比较颜色快照，DC021 记在出问题的那种配色的报告里。
  * screenshot：截图目录，文件名见 screenshotName，序号按 runs 的顺序。
  * attach：不启动浏览器，接入该本机调试端口（见 parseAttach）上的页面，attachTarget 按 URL 或标题片段选页面；
- *   不导航、不重载、不设视口（忽略 viewports，量窗口的实际尺寸），结束时只断开连接。
+ *   不导航、不重载、不设视口（忽略 viewports，量窗口的实际尺寸），结束时删掉注入的全局函数并断开连接。
  *   不能和 target、colorSchemes 同用。接入信息写在 report.context.attached。
  * 其余参数与 runAudit 相同。
  */
@@ -679,6 +694,8 @@ export async function runAudits({
     if (attach) {
       const page = await findAttachPage(endpoint, attachTarget);
       wsUrl = page.webSocketDebuggerUrl;
+      // 只连本机：调试连接地址必须和刚才查询的端口在同一主机上，否则拒绝接入。
+      if (new URL(wsUrl).host !== new URL(endpoint).host) throw new Error(`调试连接地址 ${wsUrl} 不在 ${endpoint} 上，拒绝接入`);
       attached = { endpoint, url: page.url, title: page.title || '' };
     } else {
       // 调试端口是随机的，偶尔会落在 Node fetch 拒绝访问的「坏端口」上（报 bad port）：
@@ -890,6 +907,13 @@ export async function runAudits({
     }
     return { runs };
   } finally {
+    // 接入时把注入的全局函数删掉，不留在用户的应用里。页面已跳转或连接已断时删不掉也无妨（全局本就不在了），
+    // 短超时避免断开的连接一直等回包，失败也不能盖住原来的错误。
+    if (cdp && attach) {
+      try {
+        await cdp.evaluate('(() => { for (const k of ["denseAudit", "denseAuditEvaluate", "denseAuditColors", "denseAuditThemeDiff", "denseAuditScroll"]) delete globalThis[k]; })()', { timeoutMs: 5_000 });
+      } catch { /* 页面已跳转或断开 */ }
+    }
     // 接入时 child 为 null：只断开连接，不关用户的应用。
     if (cdp) cdp.close();
     await killBrowser(child);
