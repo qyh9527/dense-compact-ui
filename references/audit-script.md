@@ -47,7 +47,7 @@ node <技能目录>/scripts/run-audit.mjs --attach 9222 --screenshot shots --out
 - `--attach` 接受端口或 `http://127.0.0.1:端口`，只连本机地址。端口上有多个页面时报错并列出 URL 与标题，用 `--attach-target <URL 或标题片段>` 选一个。
 - 接入时不导航、不重载，结束时只断开连接，不关闭应用。视口就是窗口当前的实际尺寸，写在 `context.viewport`；`context.attached` 记录端口、页面 URL、标题和 `devicePixelRatio`；截图按设备像素保存，尺寸是视口乘以 `devicePixelRatio`。
 - 不能和 URL、`--viewport`、`--width` / `--height`、`--color-scheme` 同用：它们要改视口或重新加载页面。要换尺寸就调整窗口，要换配色就在应用或系统里切换后再跑一次。
-- `--wait-for`、`--settle`、`--root`、`--touch`、`--scroll`、`--screenshot` 照常可用；`--steps` 会真的操作这个应用，只在能接受这些操作的数据和环境里跑。量取会在页面里留下 `denseAudit` 等全局函数，应用下次重载后消失。
+- `--wait-for`、`--settle`、`--root`、`--touch`、`--scroll`、`--screenshot` 照常可用；`--steps` 会真的操作这个应用，只在能接受这些操作的数据和环境里跑。量取结束时会删掉页面里的 `denseAudit` 等全局函数（页面已跳转时本就不在了）。
 - 连不上端口、目标不唯一或截图失败（窗口最小化时可能截不了）时退出码 2，stderr 写明原因。量取在应用的真实状态上进行，属于 quality-workflow.md「证据等级」的 B 级；窗口外壳、系统菜单和原生弹窗不在范围内，仍要单独验证。
 
 ## 读报告
