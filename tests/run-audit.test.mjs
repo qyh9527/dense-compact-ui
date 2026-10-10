@@ -1,11 +1,12 @@
 // run-audit.mjs 里不用浏览器的纯函数：步骤格式校验、发现合并、截图文件名、浏览器查找。
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import http from 'node:http';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import {
-  addFindings, browserCandidates, browserMissingMessage, checkSteps, findBrowser, screenshotName,
+  addFindings, browserCandidates, browserMissingMessage, checkSteps, findBrowser, parseAttach, runAudit, screenshotName,
 } from '../scripts/run-audit.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -115,4 +116,45 @@ test('CLI：找不到浏览器时退出码 2，stderr 写原因与恢复办法�
   assert.match(r.stderr, /未找到 Chromium 内核浏览器/);
   assert.match(r.stderr, /CHROME_PATH 指向的文件不存在/);
   assert.match(r.stderr, /CHROME_PATH 设为浏览器可执行文件的完整路径/);
+});
+
+test('parseAttach：端口、host:端口、http 地址都规范成 http://host:端口，非本机地址或格式不对时报错', () => {
+  assert.equal(parseAttach('9222'), 'http://127.0.0.1:9222');
+  assert.equal(parseAttach('localhost:9333'), 'http://localhost:9333');
+  assert.equal(parseAttach('http://127.0.0.1:9222/'), 'http://127.0.0.1:9222');
+  assert.equal(parseAttach('http://[::1]:9222'), 'http://[::1]:9222');
+  assert.throws(() => parseAttach('http://192.168.1.2:9222'), /只接入本机的调试端口/);
+  assert.throws(() => parseAttach('example.com:9222'), /只接入本机的调试端口/);
+  for (const bad of ['', 'abc', 'http://127.0.0.1', 'ws://127.0.0.1:9222', 'http://127.0.0.1:9222/json/list',
+    '0', 'http://127.0.0.1:0', 'http://127.0.0.1:9222?x=1', 'http://127.0.0.1:9222#a', 'http://user@127.0.0.1:9222', 'http://u:p@127.0.0.1:9222']) {
+    assert.throws(() => parseAttach(bad), /--attach 需要调试端口/, bad);
+  }
+});
+
+test('--attach 连上的端口不是 CDP 时如实说明，不误报成「连不上」；调试连接地址不在该端口上时拒绝接入', async (t) => {
+  // 一个本机 HTTP 服务按路径前缀模拟各种「不是调试端口」的回应。
+  let mode = 'html';
+  const srv = http.createServer((req, res) => {
+    if (mode === 'html') res.writeHead(200, { 'content-type': 'text/html' }).end('<!doctype html><title>dev</title>');
+    else if (mode === '404') res.writeHead(404, { 'content-type': 'application/json' }).end('{"error":"not found"}');
+    else if (mode === 'object') res.writeHead(200, { 'content-type': 'application/json' }).end('{"targets":[]}');
+    else if (mode === 'redirect') res.writeHead(302, { location: 'http://example.com/json/list' }).end();
+    else res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify([
+      { type: 'page', url: 'http://app/', title: 'app', webSocketDebuggerUrl: 'ws://203.0.113.9:9222/devtools/page/1' },
+    ]));
+  });
+  await new Promise((resolve) => srv.listen(0, '127.0.0.1', resolve));
+  t.after(() => srv.close());
+  const attach = String(srv.address().port);
+  const cases = [
+    ['html', /不像是 Chromium 远程调试端口（\/json\/list：.*JSON/],
+    ['404', /不像是 Chromium 远程调试端口（\/json\/list：HTTP 404）/],
+    ['object', /不像是 Chromium 远程调试端口（\/json\/list：返回的不是目标列表）/],
+    ['redirect', /不像是 Chromium 远程调试端口（\/json\/list：返回了重定向）/],
+    ['foreign-ws', /调试连接地址 ws:\/\/203\.0\.113\.9:9222\/devtools\/page\/1 不在 http:\/\/127\.0\.0\.1:\d+ 上，拒绝接入/],
+  ];
+  for (const [m, reason] of cases) {
+    mode = m;
+    await assert.rejects(runAudit({ attach }), reason, m);
+  }
 });

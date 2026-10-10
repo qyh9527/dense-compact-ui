@@ -6,6 +6,7 @@
 //   node scripts/run-audit.mjs <URL 或本地 html 路径> [--touch] [--root <选择器>]
 //                              [--wait-for <选择器>] [--settle 500]
 //                              [--width 1280 --height 720] [--screenshot <目录>] [--out report.json]
+//   node scripts/run-audit.mjs --attach <调试端口> [--attach-target <URL 或标题片段>] [其余同上，视口与配色参数除外]
 //   多视口：用可重复的 --viewport 宽x高 代替 --width / --height，同一个浏览器里逐个视口重载并审计，
 //   输出 { schema: 'dense-audit-multi-v1', totalFindings, reports: [每个视口一份 dense-audit-v1] }。
 // --steps steps.json：加载后按步骤文件依次 click / fill / press / hover / select / wait / expect，
@@ -17,10 +18,13 @@
 //   颜色写死没跟主题变的报 DC021，记在出问题的那种配色的报告里。输出同多视口格式。
 // --wait-for：load 之后等该选择器存在且可见（上限 60 秒，超时按出错处理）。
 // --settle：再等 DOM 连续这么多毫秒没有变化（默认 500，最多等 10 秒；0 跳过）。
+// --attach <端口或 http://127.0.0.1:端口>：不启动浏览器，接入已开着远程调试端口的 Electron / WebView2 应用，
+//   量当前页面：不导航、不重载、不改视口，结束时只断开连接、不关应用。只接受本机地址；
+//   有多个页面时用 --attach-target <URL 或标题片段> 选一个。不能和 URL、--viewport / --width / --height、--color-scheme 同用。
 // 退出码：0 没有告警；1 有告警；2 浏览器、导航或脚本出错（原因写到 stderr）。
 //
-// 也导出 runAudit / runAudits / checkSteps / screenshotName / findBrowser / browserCandidates / browserMissingMessage，
-// 供测试复用同一套 CDP 逻辑与浏览器查找。
+// 也导出 runAudit / runAudits / checkSteps / screenshotName / findBrowser / browserCandidates / browserMissingMessage /
+// parseAttach / launchBrowser / killBrowser / removeDir，供测试复用同一套 CDP 逻辑、浏览器查找与临时目录清理。
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -140,7 +144,7 @@ export function browserMissingMessage({ env = process.env, platform = process.pl
 }
 
 // 启动浏览器并等 DevToolsActivePort 出现，返回调试端口。
-async function launchBrowser(bin, userDataDir, width, height) {
+export async function launchBrowser(bin, userDataDir, width, height) {
   const args = [
     '--headless=new',
     '--remote-debugging-port=0',
@@ -176,7 +180,7 @@ async function launchBrowser(bin, userDataDir, width, height) {
   throw new Error(`超时（${STEP_TIMEOUT / 1000} 秒）：等待浏览器写出 DevToolsActivePort（${portFile}）`);
 }
 
-async function killBrowser(child) {
+export async function killBrowser(child) {
   if (!child || child.exitCode !== null || child.signalCode !== null) return;
   const exitPromise = new Promise((resolve) => child.once('exit', resolve));
   try {
@@ -194,7 +198,7 @@ async function killBrowser(child) {
   clearTimeout(timer);
 }
 
-async function removeDir(dir) {
+export async function removeDir(dir) {
   // Windows 下进程刚退出时目录可能还被占用，短暂重试。
   for (let attempt = 0; attempt < 15; attempt++) {
     try {
@@ -307,6 +311,64 @@ async function getPageWebSocketUrl(port) {
     await sleep(200);
   }
   throw new Error(`超时（${STEP_TIMEOUT / 1000} 秒）：/json/list 里没有出现 page 目标`);
+}
+
+/** 把 --attach 的值（端口、host:端口或 http://host:端口）规范成 http://host:端口；只接受本机地址。 */
+export function parseAttach(value) {
+  const s = String(value ?? '').trim();
+  const raw = /^\d+$/.test(s) ? `http://127.0.0.1:${s}` : (/^[a-z][a-z0-9+.-]*:\/\//i.test(s) ? s : `http://${s}`);
+  let u;
+  try {
+    u = new URL(raw);
+  } catch {
+    throw new Error(`参数 --attach 需要调试端口或 http://127.0.0.1:端口，实际：${value}`);
+  }
+  // 端口须是 1–65535；带查询、片段或用户名密码的地址不是调试端口的入口，一律拒绝。
+  const port = Number(u.port);
+  if (u.protocol !== 'http:' || !u.port || port < 1 || port > 65535 || (u.pathname !== '/' && u.pathname !== '') ||
+    u.search || u.hash || u.username || u.password) {
+    throw new Error(`参数 --attach 需要调试端口或 http://127.0.0.1:端口，实际：${value}`);
+  }
+  if (!['127.0.0.1', 'localhost', '[::1]'].includes(u.hostname)) {
+    throw new Error(`--attach 只接入本机的调试端口（127.0.0.1 / localhost / [::1]），实际：${u.host}`);
+  }
+  return `http://${u.host}`;
+}
+
+// 列出调试端口上的页面目标，按 match（URL 或标题片段）选出唯一一个；选不出时说明原因与可选项。
+async function findAttachPage(endpoint, match) {
+  let response;
+  try {
+    response = await fetch(`${endpoint}/json/list`, { signal: AbortSignal.timeout(10_000), redirect: 'error' });
+  } catch (err) {
+    // 重定向也在这里抛出：调试端口的 /json/list 不会重定向，归到「不像是调试端口」。
+    if (/unexpected redirect/.test(err?.cause?.message || '')) {
+      throw new Error(`${endpoint} 不像是 Chromium 远程调试端口（/json/list：返回了重定向）`);
+    }
+    throw new Error(`连不上调试端口 ${endpoint}（${err?.cause?.message || err.message}）。确认应用开着远程调试：` +
+      'Electron 用 --remote-debugging-port=<端口> 启动；Windows Tauri / WebView2 在应用创建 WebView 时的附加浏览器参数里加 ' +
+      '--remote-debugging-port=<端口>（Tauri 窗口配置的 additionalBrowserArgs），宿主不以管理员身份运行时也可在启动前设环境变量 ' +
+      'WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=<端口>');
+  }
+  // 端口通了但不是 CDP 端点（HTTP 错误、不是 JSON、不是目标列表）：单独报，别误导成「没开调试」。
+  let targets;
+  try {
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    targets = await response.json();
+    if (!Array.isArray(targets)) throw new Error('返回的不是目标列表');
+  } catch (err) {
+    throw new Error(`${endpoint} 不像是 Chromium 远程调试端口（/json/list：${err.message}）`);
+  }
+  const describe = (list) => list.map((t) => `${t.url || ''}${t.title ? `（${t.title}）` : ''}`).join('；') || '无';
+  const pages = targets.filter((t) => t.type === 'page' && !/^devtools:/.test(t.url || ''));
+  const hits = match ? pages.filter((t) => (t.url || '').includes(match) || (t.title || '').includes(match)) : pages;
+  if (hits.length === 1) {
+    if (!hits[0].webSocketDebuggerUrl) throw new Error(`页面 ${describe(hits)} 没有提供调试连接地址，可能已有别的调试器连着它`);
+    return hits[0];
+  }
+  if (!pages.length) throw new Error(`${endpoint} 上没有可接入的页面目标；已有目标：${describe(targets)}`);
+  if (!hits.length) throw new Error(`${endpoint} 上没有 URL 或标题含「${match}」的页面；可选：${describe(pages)}`);
+  throw new Error(`${endpoint} 上有 ${hits.length} 个页面，用 --attach-target <URL 或标题片段> 选一个：${describe(hits)}`);
 }
 
 // 带协议头的当 URL，其余当本地路径转成 file:// URL。
@@ -589,18 +651,28 @@ export function screenshotName(index, { width, height }, scheme, state) {
  * colorSchemes（如 ['light', 'dark']）：每个视口按每种 prefers-color-scheme 各加载一次，runs 按视口、配色顺序排列；
  * 给了两种以上时两两比较颜色快照，DC021 记在出问题的那种配色的报告里。
  * screenshot：截图目录，文件名见 screenshotName，序号按 runs 的顺序。
+ * attach：不启动浏览器，接入该本机调试端口（见 parseAttach）上的页面，attachTarget 按 URL 或标题片段选页面；
+ *   不导航、不重载、不设视口（忽略 viewports，量窗口的实际尺寸），结束时删掉注入的全局函数并断开连接。
+ *   不能和 target、colorSchemes 同用。接入信息写在 report.context.attached。
  * 其余参数与 runAudit 相同。
  */
 export async function runAudits({
   target, touch = false, root, viewports, colorSchemes, scroll = false, steps, screenshot,
-  waitFor, settle = DEFAULT_SETTLE, waitTimeoutMs = STEP_TIMEOUT,
+  waitFor, settle = DEFAULT_SETTLE, waitTimeoutMs = STEP_TIMEOUT, attach, attachTarget,
 } = {}) {
-  if (!target) throw new Error('缺少要检查的页面：请给 URL 或本地 html 路径');
-  if (!Array.isArray(viewports) || !viewports.length) throw new Error('缺少视口：viewports 至少要有一项');
+  let endpoint = null;
+  if (attach) {
+    if (target) throw new Error('--attach 量的是应用当前的页面，不能再给 URL 或本地路径（接入时不导航）');
+    if (colorSchemes && colorSchemes.length) throw new Error('--attach 下不能用 --color-scheme：切换配色要重新加载页面');
+    endpoint = parseAttach(attach);
+  } else {
+    if (!target) throw new Error('缺少要检查的页面：请给 URL 或本地 html 路径，或用 --attach 接入运行中的应用');
+    if (!Array.isArray(viewports) || !viewports.length) throw new Error('缺少视口：viewports 至少要有一项');
+  }
   if (steps) checkSteps(steps);
-  const bin = findBrowser();
-  if (!bin) throw new Error(browserMissingMessage());
-  const url = toUrl(target);
+  const bin = attach ? null : findBrowser();
+  if (!attach && !bin) throw new Error(browserMissingMessage());
+  const url = attach ? null : toUrl(target);
   // 截图目录先建好：路径不能用时在启动浏览器前就报错。
   if (screenshot) {
     try {
@@ -612,29 +684,38 @@ export async function runAudits({
   const scriptSource = fs.readFileSync(SCRIPT_PATH, 'utf8');
   const schemes = colorSchemes && colorSchemes.length ? colorSchemes : [null];
   const themeDiff = schemes.length > 1 ? loadThemeDiff(scriptSource) : null;
-  const windowWidth = Math.max(...viewports.map((v) => v.width));
-  const windowHeight = Math.max(...viewports.map((v) => v.height));
 
   const userDataDirs = [];
   let child = null;
   let cdp = null;
+  let attached = null;
   try {
-    // 调试端口是随机的，偶尔会落在 Node fetch 拒绝访问的「坏端口」上（报 bad port）：
-    // 换一个全新的浏览器实例重试，最多 5 次。
     let wsUrl;
-    for (let attempt = 1; ; attempt++) {
-      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dense-audit-'));
-      userDataDirs.push(dir);
-      const launched = await launchBrowser(bin, dir, windowWidth, windowHeight);
-      child = launched.child;
-      try {
-        wsUrl = await getPageWebSocketUrl(launched.port);
-        break;
-      } catch (err) {
-        const badPort = /bad port/.test(String(err?.cause?.message || err?.message));
-        if (!badPort || attempt >= 5) throw err;
-        await killBrowser(child);
-        child = null;
+    if (attach) {
+      const page = await findAttachPage(endpoint, attachTarget);
+      wsUrl = page.webSocketDebuggerUrl;
+      // 只连本机：调试连接地址必须和刚才查询的端口在同一主机上，否则拒绝接入。
+      if (new URL(wsUrl).host !== new URL(endpoint).host) throw new Error(`调试连接地址 ${wsUrl} 不在 ${endpoint} 上，拒绝接入`);
+      attached = { endpoint, url: page.url, title: page.title || '' };
+    } else {
+      // 调试端口是随机的，偶尔会落在 Node fetch 拒绝访问的「坏端口」上（报 bad port）：
+      // 换一个全新的浏览器实例重试，最多 5 次。
+      const windowWidth = Math.max(...viewports.map((v) => v.width));
+      const windowHeight = Math.max(...viewports.map((v) => v.height));
+      for (let attempt = 1; ; attempt++) {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dense-audit-'));
+        userDataDirs.push(dir);
+        const launched = await launchBrowser(bin, dir, windowWidth, windowHeight);
+        child = launched.child;
+        try {
+          wsUrl = await getPageWebSocketUrl(launched.port);
+          break;
+        } catch (err) {
+          const badPort = /bad port/.test(String(err?.cause?.message || err?.message));
+          if (!badPort || attempt >= 5) throw err;
+          await killBrowser(child);
+          child = null;
+        }
       }
     }
     cdp = await Cdp.connect(wsUrl);
@@ -645,10 +726,20 @@ export async function runAudits({
     const runs = [];
     let loads = 0;
     let shots = 0;
-    for (const { width, height } of viewports) {
-      await cdp.send('Emulation.setDeviceMetricsOverride', {
-        width, height, deviceScaleFactor: 1, mobile: false,
-      });
+    // 接入时只有一轮，尺寸取窗口的实际视口。
+    for (const viewport of attach ? [null] : viewports) {
+      let width;
+      let height;
+      if (attach) {
+        const size = await cdp.evaluate('({ width: innerWidth, height: innerHeight, dpr: devicePixelRatio })');
+        ({ width, height } = size);
+        attached.devicePixelRatio = size.dpr;
+      } else {
+        ({ width, height } = viewport);
+        await cdp.send('Emulation.setDeviceMetricsOverride', {
+          width, height, deviceScaleFactor: 1, mobile: false,
+        });
+      }
 
       const group = [];
       for (const scheme of schemes) {
@@ -658,23 +749,25 @@ export async function runAudits({
           });
         }
 
-        // 第一次导航过去；之后重新加载，避免同一 URL 带 # 时变成不触发 load 的页内跳转。
-        const loaded = cdp.waitEvent('Page.loadEventFired');
-        let nav;
-        try {
-          nav = loads++ === 0
-            ? await cdp.send('Page.navigate', { url })
-            : await cdp.send('Page.reload', {});
-        } catch (err) {
-          loaded.cancel();
-          throw err;
+        // 第一次导航过去；之后重新加载，避免同一 URL 带 # 时变成不触发 load 的页内跳转。接入时都不做。
+        if (!attach) {
+          const loaded = cdp.waitEvent('Page.loadEventFired');
+          let nav;
+          try {
+            nav = loads++ === 0
+              ? await cdp.send('Page.navigate', { url })
+              : await cdp.send('Page.reload', {});
+          } catch (err) {
+            loaded.cancel();
+            throw err;
+          }
+          if (nav?.errorText) {
+            // 导航已失败，load 事件不会再来：取消等待，立即以错误结束。
+            loaded.cancel();
+            throw new Error(`导航失败：${nav.errorText}（${url}）`);
+          }
+          await loaded;
         }
-        if (nav?.errorText) {
-          // 导航已失败，load 事件不会再来：取消等待，立即以错误结束。
-          loaded.cancel();
-          throw new Error(`导航失败：${nav.errorText}（${url}）`);
-        }
-        await loaded;
 
         // load 之后 SPA 可能还在异步渲染：先等 waitFor，再等 DOM 静默，审计的才是渲染完的页面。
         const readyStart = Date.now();
@@ -693,7 +786,13 @@ export async function runAudits({
           // 截图在量取之前，截到的就是这份报告量的画面。
           const shot = screenshot ? path.resolve(screenshot, screenshotName(++shots, { width, height }, scheme, state)) : null;
           if (shot) {
-            const { data } = await cdp.send('Page.captureScreenshot', { format: 'png' });
+            let data;
+            try {
+              ({ data } = await cdp.send('Page.captureScreenshot', { format: 'png' }));
+            } catch (err) {
+              if (!attach) throw err;
+              throw new Error(`应用窗口截不了图（${err.message}）：窗口最小化或被系统挂起时可能出现，还原窗口后重试，或去掉 --screenshot`);
+            }
             fs.writeFileSync(shot, Buffer.from(data, 'base64'));
           }
           const htmlLengthBefore = await cdp.evaluate('document.documentElement.outerHTML.length');
@@ -710,6 +809,7 @@ export async function runAudits({
           const htmlLengthAfter = await cdp.evaluate('document.documentElement.outerHTML.length');
           report.context.ready = ready;
           if (shot) report.context.screenshot = shot;
+          if (attached) report.context.attached = { ...attached };
           if (scheme) report.context.colorScheme = scheme;
           if (steps) {
             report.context.state = state;
@@ -807,6 +907,14 @@ export async function runAudits({
     }
     return { runs };
   } finally {
+    // 接入时把注入的全局函数删掉，不留在用户的应用里。页面已跳转或连接已断时删不掉也无妨（全局本就不在了），
+    // 短超时避免断开的连接一直等回包，失败也不能盖住原来的错误。
+    if (cdp && attach) {
+      try {
+        await cdp.evaluate('(() => { for (const k of ["denseAudit", "denseAuditEvaluate", "denseAuditColors", "denseAuditThemeDiff", "denseAuditScroll"]) delete globalThis[k]; })()', { timeoutMs: 5_000 });
+      } catch { /* 页面已跳转或断开 */ }
+    }
+    // 接入时 child 为 null：只断开连接，不关用户的应用。
     if (cdp) cdp.close();
     await killBrowser(child);
     for (const dir of userDataDirs) await removeDir(dir);
@@ -844,6 +952,8 @@ function parseArgs(argv) {
       }
       opts.steps = checkSteps(parsed);
     }
+    else if (a === '--attach') opts.attach = needValue(a, i++);
+    else if (a === '--attach-target') opts.attachTarget = needValue(a, i++);
     else if (a === '--root') opts.root = needValue(a, i++);
     else if (a === '--out') opts.out = needValue(a, i++);
     else if (a === '--screenshot') opts.screenshot = needValue(a, i++);
@@ -866,7 +976,17 @@ function parseArgs(argv) {
     } else if (a.startsWith('--')) throw new Error(`未知参数：${a}`);
     else rest.push(a);
   }
-  if (rest.length !== 1) throw new Error('用法：node scripts/run-audit.mjs <URL 或本地 html 路径> [--touch] [--root <选择器>] [--wait-for <选择器>] [--settle 500] [--scroll] [--steps steps.json] [--width 1280 --height 720 | --viewport 1280x720 --viewport 390x844 …] [--color-scheme light,dark] [--screenshot <目录>] [--out report.json]');
+  if (opts.attachTarget && !opts.attach) throw new Error('--attach-target 要和 --attach 一起用');
+  if (opts.attach) {
+    // 接入时量窗口的实际尺寸与当前配色；这些参数要改尺寸或重新加载页面，直接拒绝。
+    if (rest.length) throw new Error(`--attach 量的是应用当前的页面，不能再给 URL 或本地路径（接入时不导航），实际：${rest.join(' ')}`);
+    if (viewports.length || opts.width || opts.height || schemes.length) {
+      throw new Error('--attach 下用窗口的实际尺寸与当前配色，不能用 --viewport / --width / --height / --color-scheme（它们要改视口或重新加载页面）');
+    }
+    parseAttach(opts.attach);
+    return opts;
+  }
+  if (rest.length !== 1) throw new Error('用法：node scripts/run-audit.mjs <URL 或本地 html 路径 | --attach <调试端口> [--attach-target <URL 或标题片段>]> [--touch] [--root <选择器>] [--wait-for <选择器>] [--settle 500] [--scroll] [--steps steps.json] [--width 1280 --height 720 | --viewport 1280x720 --viewport 390x844 …] [--color-scheme light,dark] [--screenshot <目录>] [--out report.json]');
   if (viewports.length && (opts.width || opts.height)) throw new Error('--viewport 不能和 --width / --height 同时使用');
   if (viewports.length) opts.viewports = viewports;
   if (schemes.length) opts.colorSchemes = schemes;
